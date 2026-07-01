@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.0.12
+
+- Add "What This PR Does" section to review output format
+
 ## v0.0.11
 
 - Add `reactions: write` permission to README and SECURITY.md (required by OpenCode engine)
