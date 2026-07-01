@@ -123,7 +123,7 @@ runs:
         if [ -n "$INPUT_CONTEXT_FILES" ]; then
           IFS=',' read -ra FILES <<< "$INPUT_CONTEXT_FILES"
         else
-          FILES=("CLAUDE.md" "docs/architecture.md" "docs/ARCHITECTURE.md" "ARCHITECTURE.md")
+          FILES=("CLAUDE.md" "AGENTS.md" "docs/architecture.md" "docs/ARCHITECTURE.md" "ARCHITECTURE.md")
         fi
         TOTAL=0
         MAX=15000

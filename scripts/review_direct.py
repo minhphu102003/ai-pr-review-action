@@ -310,6 +310,7 @@ _DIFF_THRESHOLD_FOR_CONTEXT = 70000
 # Files to auto-detect when user doesn't specify context_files
 _AUTO_CONTEXT_PATHS = [
     "CLAUDE.md",
+    "AGENTS.md",
     "docs/architecture.md",
     "docs/ARCHITECTURE.md",
     "ARCHITECTURE.md",
