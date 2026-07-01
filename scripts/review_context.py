@@ -21,7 +21,7 @@ _GRAPHQL_QUERY = """
 query($owner: String!, $repo: String!, $pr: Int!, $after: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
-      reviewThreads(first: 50, after: $after, states: [UNRESOLVED]) {
+      reviewThreads(first: 50, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id isResolved isOutdated path line
@@ -64,6 +64,9 @@ def fetch_unresolved_threads(owner: str, repo: str, pr_number: int, token: str) 
         pr_data = result["data"]["repository"]["pullRequest"]
         thread_conn = pr_data["reviewThreads"]
         for node in thread_conn["nodes"]:
+            # Filter resolved threads client-side
+            if node["isResolved"]:
+                continue
             comments = [
                 {
                     "id": c["id"],
