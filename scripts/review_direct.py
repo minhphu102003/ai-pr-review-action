@@ -320,7 +320,7 @@ _AUTO_CONTEXT_PATHS = [
 ]
 
 
-def _fetch_file_content(owner: str, repo: str, path: str, token: str) -> str | None:
+def _fetch_file_content(owner: str, repo: str, path: str, token: str, warn: bool = False) -> str | None:
     """Fetch a single file's raw content from GitHub. Returns None on error."""
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     headers = {
@@ -333,17 +333,19 @@ def _fetch_file_content(owner: str, repo: str, path: str, token: str) -> str | N
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             return resp.read().decode("utf-8")
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            print(f"WARNING: Context file not found: {path}", file=sys.stderr)
-        else:
-            print(f"WARNING: Failed to fetch context file {path}: HTTP {e.code}", file=sys.stderr)
+        if warn:
+            if e.code == 404:
+                print(f"WARNING: Context file not found: {path}", file=sys.stderr)
+            else:
+                print(f"WARNING: Failed to fetch context file {path}: HTTP {e.code}", file=sys.stderr)
         return None
     except urllib.error.URLError as e:
-        print(f"WARNING: Failed to fetch context file {path}: {e.reason}", file=sys.stderr)
+        if warn:
+            print(f"WARNING: Failed to fetch context file {path}: {e.reason}", file=sys.stderr)
         return None
 
 
-def _list_dir_files(owner: str, repo: str, path: str, token: str, limit: int = 3) -> list[str]:
+def _list_dir_files(owner: str, repo: str, path: str, token: str, limit: int = 3, warn: bool = False) -> list[str]:
     """List files in a directory, sorted by most recently modified. Returns up to `limit` file paths."""
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     headers = {
@@ -356,7 +358,8 @@ def _list_dir_files(owner: str, repo: str, path: str, token: str, limit: int = 3
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             items = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.HTTPError, urllib.error.URLError) as e:
-        print(f"WARNING: Failed to list directory {path}: {e}", file=sys.stderr)
+        if warn:
+            print(f"WARNING: Failed to list directory {path}: {e}", file=sys.stderr)
         return []
 
     if not isinstance(items, list):
@@ -395,21 +398,21 @@ def fetch_context_files(
         raw_paths = list(_AUTO_CONTEXT_PATHS)
 
     # Resolve directories to individual files
+    is_user_specified = bool(context_files_input)
     paths = []
     for p in raw_paths:
         # Try as file first
-        content = _fetch_file_content(owner, repo, p, token)
+        content = _fetch_file_content(owner, repo, p, token, warn=is_user_specified)
         if content is not None:
             paths.append((p, content))
         else:
             # Try as directory
-            dir_files = _list_dir_files(owner, repo, p, token, limit=3)
+            dir_files = _list_dir_files(owner, repo, p, token, limit=3, warn=is_user_specified)
             if dir_files:
                 for df in dir_files:
-                    fc = _fetch_file_content(owner, repo, df, token)
+                    fc = _fetch_file_content(owner, repo, df, token, warn=is_user_specified)
                     if fc is not None:
                         paths.append((df, fc))
-            # If neither file nor directory, warning already printed by _fetch_file_content
 
     parts = []
     total_chars = 0
