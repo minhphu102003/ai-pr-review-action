@@ -311,6 +311,8 @@ _DIFF_THRESHOLD_FOR_CONTEXT = 70000
 _AUTO_CONTEXT_PATHS = [
     "CLAUDE.md",
     "AGENTS.md",
+    "SOUL.md",
+    "MEMORY.md",
     "docs/architecture.md",
     "docs/ARCHITECTURE.md",
     "ARCHITECTURE.md",
