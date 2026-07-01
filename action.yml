@@ -133,28 +133,69 @@ runs:
           exit 0
         fi
 
+        # Fetch a single file's raw content. Returns empty on error.
+        fetch_file() {
+          local path="$1"
+          curl -sfL -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3.raw" \
+            "https://api.github.com/repos/$REPO/contents/$path" 2>/dev/null || true
+        }
+
+        # List directory and return up to 3 most recent .md/.txt files
+        list_dir() {
+          local dir="$1"
+          local items
+          items=$(curl -sfL -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/contents/$dir" 2>/dev/null || true)
+          [ -z "$items" ] && return
+          # Filter to files, prefer .md/.txt, sort by name desc, take 3
+          echo "$items" | jq -r '
+            if type == "array" then
+              [.[] | select(.type == "file")] |
+              (if any(.name | test("\\.(md|txt|prompt)$")) then
+                [.[] | select(.name | test("\\.(md|txt|prompt)$"))]
+              else . end) |
+              sort_by(.name) | reverse | .[0:3] | .[].path
+            else empty end' 2>/dev/null || true
+        }
+
         CONTEXT=""
         if [ -n "$INPUT_CONTEXT_FILES" ]; then
-          IFS=',' read -ra FILES <<< "$INPUT_CONTEXT_FILES"
+          IFS=',' read -ra RAW_FILES <<< "$INPUT_CONTEXT_FILES"
         else
-          FILES=("CLAUDE.md" "AGENTS.md" "SOUL.md" "MEMORY.md" "docs/architecture.md" "docs/ARCHITECTURE.md" "ARCHITECTURE.md")
+          RAW_FILES=("CLAUDE.md" "AGENTS.md" "SOUL.md" "MEMORY.md" "docs/architecture.md" "docs/ARCHITECTURE.md" "ARCHITECTURE.md")
         fi
+
+        # Resolve paths: file or directory
+        FILES=()
+        for p in "${RAW_FILES[@]}"; do
+          p=$(echo "$p" | xargs)  # trim whitespace
+          [ -z "$p" ] && continue
+          # Try as file first
+          CONTENT=$(fetch_file "$p")
+          if [ -n "$CONTENT" ]; then
+            FILES+=("$p")
+          else
+            # Try as directory
+            DIR_FILES=$(list_dir "$p")
+            if [ -n "$DIR_FILES" ]; then
+              while IFS= read -r df; do
+                FILES+=("$df")
+              done <<< "$DIR_FILES"
+            elif [ -n "$INPUT_CONTEXT_FILES" ]; then
+              echo "::warning::Context path not found: $p"
+            fi
+          fi
+        done
+
         TOTAL=0
         MAX=15000
         for f in "${FILES[@]}"; do
-          f=$(echo "$f" | xargs)  # trim whitespace
           [ -z "$f" ] && continue
           [ $TOTAL -ge $MAX ] && break
-          CONTENT=$(curl -sfL -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3.raw" \
-            "https://api.github.com/repos/$REPO/contents/$f" 2>/dev/null || true)
-          if [ -z "$CONTENT" ]; then
-            # Only warn for user-specified paths
-            if [ -n "$INPUT_CONTEXT_FILES" ]; then
-              echo "::warning::Context file not found: $f"
-            fi
-            continue
-          fi
+          CONTENT=$(fetch_file "$f")
+          [ -z "$CONTENT" ] && continue
           REMAINING=$((MAX - TOTAL))
           if [ ${#CONTENT} -gt $REMAINING ]; then
             CONTENT="${CONTENT:0:$REMAINING}"
