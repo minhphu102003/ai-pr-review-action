@@ -652,7 +652,7 @@ def post_inline_comments(
         "User-Agent": "ai-pr-review-action",
     }
     payload = json.dumps({
-        "body": summary_body,
+        "body": "",
         "event": "COMMENT",
         "comments": comments,
     }).encode("utf-8")
@@ -719,11 +719,8 @@ def main():
     review = sanitize_review(review)
     clean_text, issues = extract_issues_json(review)
 
-    # Strip Key Issues from summary if inline comments will be posted
-    summary_text = strip_key_issues(clean_text) if issues else clean_text
-
-    # Post summary comment (non-resolvable)
-    post_comment(owner, repo, pr_number, token, summary_text, update_existing=update_existing)
+    # Post summary comment (non-resolvable, full review)
+    post_comment(owner, repo, pr_number, token, clean_text, update_existing=update_existing)
 
     # Post inline comments (resolvable)
     if issues:

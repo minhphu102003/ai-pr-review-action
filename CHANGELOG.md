@@ -2,9 +2,8 @@
 
 ## v0.0.18
 
-- Add severity level (Critical/Warning/Suggestion) to inline comments
-- Strip Key Issues and Code Improvements from summary comment (now inline)
-- Summary comment only shows overview: PR table, Flow Overview, Summary
+- Add severity level (Critical/Warning/Suggestion) with color icons to inline comments
+- Remove duplicate review body from inline review (summary comment is the single source of truth)
 
 ## v0.0.16
 
