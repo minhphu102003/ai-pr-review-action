@@ -1,0 +1,84 @@
+name: "Bad Cases #3-6: URL, Missing Key, Both Keys, Embedded Creds"
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  # --- Test 3: Invalid Base URL ---
+  test3-openai-url:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: gpt-4.1-mini
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          openai_base_url: https://api.does-not-exist-xyz.com/v1
+
+  test3-anthropic-url:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: mimo-v2.5-pro
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_base_url: https://fake-anthropic-proxy.invalid/v1
+
+  # --- Test 4: Missing API Key ---
+  test4-missing-openai:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: gpt-4.1-mini
+          # openai_api_key not set
+
+  test4-missing-anthropic:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: mimo-v2.5-pro
+          anthropic_base_url: https://token-plan-sgp.xiaomimimo.com/anthropic
+          # anthropic_api_key not set
+
+  # --- Test 5: Both Keys Set ---
+  test5-both-keys:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: gpt-4.1-mini
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  # --- Test 6: Embedded Credentials in URL ---
+  test6-embedded-creds:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: mimo-v2.5-pro
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_base_url: https://mysecretkey123@proxy.example.com/v1
