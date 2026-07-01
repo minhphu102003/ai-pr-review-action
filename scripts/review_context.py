@@ -111,8 +111,7 @@ def filter_threads(threads: list[dict]) -> list[dict]:
 def find_user_replies(threads: list[dict]) -> list[dict]:
     """Find threads where user replied to bot's comment.
 
-    Returns list of dicts with: thread_id, comment_id (bot's comment),
-    path, line, bot_comment body, user_replies list.
+    Returns ALL user replies — LLM decides whether to reply or not.
     """
     replies = []
     for thread in threads:
@@ -148,7 +147,9 @@ def format_reply_context(replies: list[dict], max_chars: int = 4000) -> str:
 
     lines = [
         "<user_replies>",
-        "The user replied to your previous review comments. Generate appropriate replies.",
+        "The user replied to your previous review comments. You decide whether to reply:",
+        "- If user says 'fixed' or 'done' → no reply needed, skip",
+        "- If user is debating or asking questions → generate a reply",
         "",
     ]
     total = len("\n".join(lines))
