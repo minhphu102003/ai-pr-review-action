@@ -108,29 +108,10 @@ def filter_threads(threads: list[dict]) -> list[dict]:
     return filtered
 
 
-def _is_resolved_reply(body: str) -> bool:
-    """Check if user reply indicates the issue is resolved (not a debate)."""
-    import re
-    body_lower = body.lower().strip()
-    # Short replies like "fixed", "done", "resolved"
-    if len(body_lower) < 30:
-        patterns = [
-            r"\bfixed\b", r"\bresol(?:ved?|ve)\b", r"\bdone\b",
-            r"\bachnowledged?\b", r"\bthanks?\b.*\bfix\b",
-            r"\bpushed\b.*\bfix\b", r"\bcommitted\b", r"\bupdated\b.*\bcode\b",
-        ]
-        return any(re.search(p, body_lower) for p in patterns)
-    # Longer replies that start with resolution indicators
-    if re.match(r"^(fixed|done|resolved|acknowledged|thanks)", body_lower):
-        return True
-    return False
-
-
 def find_user_replies(threads: list[dict]) -> list[dict]:
-    """Find threads where user is genuinely debating (not resolved).
+    """Find threads where user replied to bot's comment.
 
-    Returns list of dicts with: thread_id, comment_id (bot's comment),
-    path, line, bot_comment body, user_replies list.
+    Returns ALL user replies — LLM decides whether to reply or not.
     """
     replies = []
     for thread in threads:
@@ -145,12 +126,6 @@ def find_user_replies(threads: list[dict]) -> list[dict]:
         if not user_replies:
             continue
 
-        # Filter: only keep replies that are NOT resolved
-        debate_replies = [r for r in user_replies if not _is_resolved_reply(r["body"])]
-
-        if not debate_replies:
-            continue
-
         replies.append({
             "thread_id": thread["id"],
             "comment_id": bot_comment["id"],
@@ -159,7 +134,7 @@ def find_user_replies(threads: list[dict]) -> list[dict]:
             "bot_comment": bot_comment["body"][:500],
             "user_replies": [
                 {"author": r["author"], "body": r["body"][:500]}
-                for r in debate_replies
+                for r in user_replies
             ],
         })
     return replies
@@ -172,7 +147,9 @@ def format_reply_context(replies: list[dict], max_chars: int = 4000) -> str:
 
     lines = [
         "<user_replies>",
-        "The user is debating your previous review comments. Generate appropriate replies ONLY for genuine debates.",
+        "The user replied to your previous review comments. You decide whether to reply:",
+        "- If user says 'fixed' or 'done' → no reply needed, skip",
+        "- If user is debating or asking questions → generate a reply",
         "",
     ]
     total = len("\n".join(lines))
