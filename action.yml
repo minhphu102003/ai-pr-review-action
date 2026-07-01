@@ -47,6 +47,10 @@ inputs:
     description: 'Glob patterns to exclude from review (comma-separated)'
     required: false
     default: ''
+  context_files:
+    description: 'Comma-separated list of files to include as context for the review (e.g. docs/architecture.md,CLAUDE.md). Auto-detects if empty.'
+    required: false
+    default: ''
   update_comment:
     description: 'Update existing review comment instead of creating a new one'
     required: false
@@ -105,6 +109,54 @@ runs:
           echo "${DELIMITER}"
         } >> "$GITHUB_OUTPUT"
 
+    # Fetch context files for OpenCode engine
+    - id: resolve-context
+      if: inputs.engine == 'opencode'
+      shell: bash
+      env:
+        INPUT_CONTEXT_FILES: ${{ inputs.context_files }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+      run: |
+        CONTEXT=""
+        if [ -n "$INPUT_CONTEXT_FILES" ]; then
+          IFS=',' read -ra FILES <<< "$INPUT_CONTEXT_FILES"
+        else
+          FILES=("CLAUDE.md" "docs/architecture.md" "docs/ARCHITECTURE.md" "ARCHITECTURE.md")
+        fi
+        TOTAL=0
+        MAX=15000
+        for f in "${FILES[@]}"; do
+          f=$(echo "$f" | xargs)  # trim whitespace
+          [ -z "$f" ] && continue
+          [ $TOTAL -ge $MAX ] && break
+          CONTENT=$(curl -sfL -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3.raw" \
+            "https://api.github.com/repos/$REPO/contents/$f" 2>/dev/null || true)
+          if [ -z "$CONTENT" ]; then
+            echo "::warning::Context file not found: $f"
+            continue
+          fi
+          REMAINING=$((MAX - TOTAL))
+          if [ ${#CONTENT} -gt $REMAINING ]; then
+            CONTENT="${CONTENT:0:$REMAINING}"
+          fi
+          CONTEXT="${CONTEXT}--- ${f} ---
+        ${CONTENT}
+
+        "
+          TOTAL=$((TOTAL + ${#CONTENT}))
+        done
+        DELIMITER="ghadelim_${RUN_ID}"
+        if [ -n "$CONTEXT" ]; then
+          {
+            echo "CONTEXT<<${DELIMITER}"
+            echo "$CONTEXT"
+            echo "${DELIMITER}"
+          } >> "$GITHUB_OUTPUT"
+        fi
+
     # Engine: OpenCode (default)
     - name: Review with OpenCode
       if: inputs.engine == 'opencode'
@@ -115,7 +167,7 @@ runs:
       with:
         model: ${{ inputs.model || 'opencode/mimo-v2.5-free' }}
         use_github_token: true
-        prompt: ${{ steps.resolve-prompt.outputs.PROMPT }}
+        prompt: ${{ steps.resolve-context.outputs.CONTEXT }}${{ steps.resolve-prompt.outputs.PROMPT }}
         share: ${{ inputs.share }}
 
     # Engine: Direct LLM API (OpenAI or Anthropic)
@@ -131,6 +183,7 @@ runs:
         MODEL: ${{ inputs.model }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         EXCLUDE: ${{ inputs.exclude }}
+        CONTEXT_FILES: ${{ inputs.context_files }}
         UPDATE_COMMENT: ${{ inputs.update_comment }}
         PROMPT: ${{ steps.resolve-prompt.outputs.PROMPT }}
       run: python3 "$ACTION_PATH/scripts/review_direct.py"

@@ -15,6 +15,9 @@
   - Do not flag code that exists outside the diff unless you can verify it
   - If you need more context to be certain, say so explicitly
   - Do not speculate about breaking changes unless you can identify specific affected code
+  - If a <context> block is provided, use it to understand project architecture, naming conventions, and design decisions
+  - Context files may include architecture docs, specs, or project instructions — use them to inform your review, not to flag issues in them
+  - If context files conflict with the diff, the diff takes precedence
 </context_rules>
 
 <confidence_rules>

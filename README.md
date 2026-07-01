@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: minhphu102003/ai-pr-review-action@v0.0.18
+      - uses: minhphu102003/ai-pr-review-action@v0.0.19
         with:
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
 ```
@@ -38,7 +38,7 @@ jobs:
 ### Direct OpenAI
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.18
+      - uses: minhphu102003/ai-pr-review-action@v0.0.19
         with:
           engine: direct
           model: gpt-4.1-mini
@@ -48,7 +48,7 @@ jobs:
 ### Direct Anthropic
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.18
+      - uses: minhphu102003/ai-pr-review-action@v0.0.19
         with:
           engine: direct
           model: claude-haiku-4-5-20251001
@@ -82,6 +82,7 @@ The action masks all API key values in workflow logs automatically.
 | `github_token` | Yes | `${{ github.token }}` | GitHub token |
 | `prompt_file` | No | *(built-in)* | Custom prompt file path |
 | `exclude` | No | - | Glob patterns to exclude (direct only) |
+| `context_files` | No | *(auto-detect)* | Comma-separated files for review context (direct only) |
 | `update_comment` | No | `true` | Update existing comment (direct only) |
 | `share` | No | `false` | Share OpenCode session link (opencode only) |
 

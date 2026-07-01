@@ -302,6 +302,136 @@ def get_pr_files(owner: str, repo: str, pr_number: int, token: str) -> list[dict
     return all_files
 
 
+# Context file budget: max 15K chars for architecture/spec files
+_CONTEXT_MAX_CHARS = 15000
+# Only fetch context files when diff is smaller than this
+_DIFF_THRESHOLD_FOR_CONTEXT = 70000
+
+# Files to auto-detect when user doesn't specify context_files
+_AUTO_CONTEXT_PATHS = [
+    "CLAUDE.md",
+    "docs/architecture.md",
+    "docs/ARCHITECTURE.md",
+    "ARCHITECTURE.md",
+    "README.md",
+]
+
+
+def _fetch_file_content(owner: str, repo: str, path: str, token: str) -> str | None:
+    """Fetch a single file's raw content from GitHub. Returns None on error."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3.raw",
+        "User-Agent": "ai-pr-review-action",
+    }
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            return resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"WARNING: Context file not found: {path}", file=sys.stderr)
+        else:
+            print(f"WARNING: Failed to fetch context file {path}: HTTP {e.code}", file=sys.stderr)
+        return None
+    except urllib.error.URLError as e:
+        print(f"WARNING: Failed to fetch context file {path}: {e.reason}", file=sys.stderr)
+        return None
+
+
+def _list_dir_files(owner: str, repo: str, path: str, token: str, limit: int = 3) -> list[str]:
+    """List files in a directory, sorted by most recently modified. Returns up to `limit` file paths."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            items = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        print(f"WARNING: Failed to list directory {path}: {e}", file=sys.stderr)
+        return []
+
+    if not isinstance(items, list):
+        return []
+
+    # Filter to files only (not subdirs), prefer .md files
+    files = [i for i in items if i.get("type") == "file"]
+    md_files = [i for i in files if i["name"].endswith((".md", ".txt", ".prompt"))]
+    candidates = md_files if md_files else files
+
+    # Sort by name descending (assumes date-prefixed names like 2026-01-spec.md)
+    # If no date pattern, just take first N
+    candidates.sort(key=lambda x: x["name"], reverse=True)
+    return [c["path"] for c in candidates[:limit]]
+
+
+def fetch_context_files(
+    owner: str, repo: str, token: str, context_files_input: str | None
+) -> str:
+    """Fetch context files from repo for LLM context.
+
+    Priority:
+    1. User-specified files (context_files input, comma-separated)
+    2. Auto-detect: CLAUDE.md, architecture docs, README
+
+    If a path is a directory, fetches 1-3 most recent files from it.
+    Logs warning for paths that don't exist.
+
+    Returns concatenated file content, truncated to _CONTEXT_MAX_CHARS.
+    Returns empty string on failure (non-blocking).
+    """
+    # Determine which files to fetch
+    if context_files_input:
+        raw_paths = [p.strip() for p in context_files_input.split(",") if p.strip()]
+    else:
+        raw_paths = list(_AUTO_CONTEXT_PATHS)
+
+    # Resolve directories to individual files
+    paths = []
+    for p in raw_paths:
+        # Try as file first
+        content = _fetch_file_content(owner, repo, p, token)
+        if content is not None:
+            paths.append((p, content))
+        else:
+            # Try as directory
+            dir_files = _list_dir_files(owner, repo, p, token, limit=3)
+            if dir_files:
+                for df in dir_files:
+                    fc = _fetch_file_content(owner, repo, df, token)
+                    if fc is not None:
+                        paths.append((df, fc))
+            # If neither file nor directory, warning already printed by _fetch_file_content
+
+    parts = []
+    total_chars = 0
+
+    for path, content in paths:
+        if total_chars >= _CONTEXT_MAX_CHARS:
+            break
+
+        # Truncate README to first 2000 chars
+        if path.upper().endswith("README.md") and len(content) > 2000:
+            content = content[:2000] + "\n... [truncated]"
+
+        # Check budget
+        remaining = _CONTEXT_MAX_CHARS - total_chars
+        if len(content) > remaining:
+            content = content[:remaining] + "\n... [truncated]"
+
+        parts.append(f"--- {path} ---\n{content}")
+        total_chars += len(content) + len(path) + 10  # header overhead
+
+    if parts:
+        print(f"Context files: {len(parts)} file(s), {total_chars} chars")
+    return "\n\n".join(parts)
+
+
 def filter_diff(diff: str, files: list[dict], exclude_patterns: str) -> str:
     """Filter out excluded files and binary files from diff."""
     if not exclude_patterns:
@@ -388,7 +518,14 @@ def _build_api_url(base_url_env: str, default_url: str, path: str) -> str:
     return f"{base_url}/v1/{path}"
 
 
-def call_openai(api_key: str, model: str, prompt: str, diff: str) -> str:
+def _build_user_message(diff: str, context: str = "") -> str:
+    """Build the user message with optional context files."""
+    if context:
+        return f"<context>\n{context}\n</context>\n\n<diff>\n```diff\n{diff}\n```\n</diff>"
+    return f"Here is the PR diff to review:\n\n```diff\n{diff}\n```"
+
+
+def call_openai(api_key: str, model: str, prompt: str, diff: str, context: str = "") -> str:
     """Call OpenAI or OpenAI-compatible API."""
     url = _build_api_url("OPENAI_BASE_URL", "https://api.openai.com", "chat/completions")
 
@@ -400,7 +537,7 @@ def call_openai(api_key: str, model: str, prompt: str, diff: str) -> str:
         "model": model,
         "messages": [
             {"role": "system", "content": prompt},
-            {"role": "user", "content": f"Here is the PR diff to review:\n\n```diff\n{diff}\n```"},
+            {"role": "user", "content": _build_user_message(diff, context)},
         ],
         "max_tokens": 4096,
         "temperature": 0.3,
@@ -416,7 +553,7 @@ def call_openai(api_key: str, model: str, prompt: str, diff: str) -> str:
     return result["choices"][0]["message"]["content"]
 
 
-def call_anthropic(api_key: str, model: str, prompt: str, diff: str) -> str:
+def call_anthropic(api_key: str, model: str, prompt: str, diff: str, context: str = "") -> str:
     """Call Anthropic or Anthropic-compatible API."""
     url = _build_api_url("ANTHROPIC_BASE_URL", "https://api.anthropic.com", "messages")
 
@@ -431,7 +568,7 @@ def call_anthropic(api_key: str, model: str, prompt: str, diff: str) -> str:
         "temperature": 0.3,
         "system": prompt,
         "messages": [
-            {"role": "user", "content": f"Here is the PR diff to review:\n\n```diff\n{diff}\n```"},
+            {"role": "user", "content": _build_user_message(diff, context)},
         ],
     }).encode("utf-8")
 
@@ -674,6 +811,7 @@ def main():
     prompt = get_env("PROMPT", required=True)
     exclude = get_env("EXCLUDE")
     update_existing = get_env("UPDATE_COMMENT").lower() != "false"
+    context_files_input = get_env("CONTEXT_FILES")
 
     print(f"Provider: {provider}, Model: {model}")
     print(f"PR: {owner}/{repo}#{pr_number}")
@@ -703,15 +841,23 @@ def main():
                      update_existing=update_existing)
         return
 
-    # Truncate if needed
-    diff = truncate_diff(diff)
+    # Fetch context files if diff is small enough
+    context = ""
+    diff_max = 100000
+    if len(diff) < _DIFF_THRESHOLD_FOR_CONTEXT:
+        context = fetch_context_files(owner, repo, token, context_files_input)
+        if context:
+            diff_max = 70000  # Reserve budget for context
+
+    # Truncate diff
+    diff = truncate_diff(diff, max_chars=diff_max)
 
     # Call LLM
     print(f"Calling {provider} API...")
     if provider == "openai":
-        review = call_openai(api_key, model, prompt, diff)
+        review = call_openai(api_key, model, prompt, diff, context)
     else:
-        review = call_anthropic(api_key, model, prompt, diff)
+        review = call_anthropic(api_key, model, prompt, diff, context)
 
     print(f"Review length: {len(review)} chars")
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.19
+
+- Add context files support: auto-detect architecture docs, CLAUDE.md, README
+- User can specify context files via `context_files` input (comma-separated)
+- Smart budget: context files only fetched when diff < 70K chars (15K budget)
+- LLM receives context in `<context>` block alongside the diff
+
 ## v0.0.18
 
 - Add severity level (Critical/Warning/Suggestion) with color icons to inline comments
