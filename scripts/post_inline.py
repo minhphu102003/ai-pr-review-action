@@ -137,7 +137,12 @@ def find_existing_review(owner: str, repo: str, pr_number: int, token: str) -> i
     }
     result = safe_request(url, headers=headers)
     for review in result:
+        # Look for reviews with our signature OR reviews posted by bot with inline comments
         if REVIEW_SIGNATURE in review.get("body", ""):
+            return review["id"]
+        # Also check for reviews posted by github-actions[bot] (OpenCode engine)
+        user = review.get("user", {}).get("login", "")
+        if user == "github-actions[bot]" and review.get("state") == "COMMENTED":
             return review["id"]
     return None
 
