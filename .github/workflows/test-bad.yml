@@ -1,0 +1,32 @@
+name: "Bad Case #2: Invalid Model Name"
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  test-openai:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: gpt-99-nonexistent
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+
+  test-anthropic:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: claud-sonnet-4  # typo: missing 'e'
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_base_url: https://token-plan-sgp.xiaomimimo.com/anthropic
