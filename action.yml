@@ -1,5 +1,5 @@
-name: 'AI PR Review'
-description: 'AI-powered PR review with anti-hallucination rules, severity callouts, and Mermaid diagrams. Supports OpenCode and direct LLM APIs (OpenAI, Anthropic).'
+name: 'AI PR Review Action'
+description: 'AI-powered PR review with anti-hallucination rules, severity callouts, and Mermaid diagrams.'
 author: 'minhphu102003'
 
 branding:
