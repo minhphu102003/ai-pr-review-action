@@ -1,0 +1,33 @@
+name: "Bad Case #3: Invalid Base URL"
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  test-openai:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: gpt-4.1-mini
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          openai_base_url: https://api.does-not-exist-xyz.com/v1
+
+  test-anthropic:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: mimo-v2.5-pro
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_base_url: https://fake-anthropic-proxy.invalid/v1
