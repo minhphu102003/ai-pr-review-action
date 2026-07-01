@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.0.20
+
+- Auto-reply to user comments: bot detects user replies to inline review comments and generates contextual responses
+- LLM decides whether to reply — no regex filtering; handles debates, questions, and "fixed" replies intelligently
+- Review context injection: unresolved threads passed as `<previous_review_context>` to prevent re-raising discussed issues
+- GraphQL API for fetching PR review threads with client-side filtering
+- Reply context formatted as `<user_replies>` block with comment IDs for structured reply generation
+- Bot replies tagged with `<!-- AI_REVIEW_REPLY -->` to avoid re-processing
+- Both engines (OpenCode and direct LLM) support auto-reply
+- `/review` comment trigger: users can comment `/review` on a PR to trigger re-review
+
 ## v0.0.19
 
 - Add context files support: auto-detect architecture docs, CLAUDE.md, AGENTS.md, SOUL.md, MEMORY.md, README
