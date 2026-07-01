@@ -8,6 +8,16 @@ permissions:
   contents: read
 
 jobs:
+  test-opencode:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          model: totally-fake-model-123
+          opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
+
   test-openai:
     if: "!github.event.pull_request.draft"
     runs-on: ubuntu-latest
