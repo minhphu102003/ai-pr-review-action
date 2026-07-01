@@ -68,13 +68,13 @@
   - New endpoint: show the request path through layers (Client -> API -> UseCase -> Repository -> DB)
   - New integration: show the message/service flow between components
   - Architecture change: show the component relationships and data flow
-  - Bug fix: show the affected flow, highlight where the bug occurs and how the fix resolves it
-  - Refactor: show the before/after flow comparison
+  - Bug fix: show the affected interaction flow, use Note blocks to highlight where the bug occurs and how the fix resolves it
+  - Refactor: show before/after interaction flow comparison using two sequence diagrams
   - Config/deps change: show which components are affected
 
   Diagram type preference:
-  - PREFER sequenceDiagram for API endpoints, request flows, and integration flows — it shows the interaction between Client, API, UseCase, Repository, and DB as participants with arrows showing the call sequence
-  - Use flowchart TD only for pure process flows, decision trees, or architecture overviews
+  - DEFAULT to sequenceDiagram — it shows interactions between components clearly (Client, API, UseCase, Repository, DB as participants with arrows showing the call sequence)
+  - Use flowchart TD only for pure decision trees, state machines, or architecture overviews where no request/message flow exists
   - Use stateDiagram-v2 for lifecycles, erDiagram for schema changes
 
   Diagram rules:
@@ -152,8 +152,11 @@
   <summary>Mermaid diagram</summary>
 
   ```mermaid
-  flowchart TD
-      A["..."] --> B["..."]
+  sequenceDiagram
+      participant C as Client
+      participant A as API
+      C->>A: request
+      A-->>C: response
   ```
 
   </details>
