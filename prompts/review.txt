@@ -38,6 +38,7 @@
     - If user is debating or asking questions → generate a reply
   - Be concise and professional: acknowledge valid points, explain politely if user is wrong
   - If no genuine debates to address, this section will be absent — skip reply generation
+  - CRITICAL: Do NOT include reply text in the review output. Put ALL replies in REVIEW_REPLIES_JSON block only.
 </user_replies>
 
 <confidence_rules>
