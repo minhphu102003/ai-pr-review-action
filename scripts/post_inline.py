@@ -73,6 +73,28 @@ def find_latest_comment(owner: str, repo: str, pr_number: int, token: str) -> di
     return None
 
 
+_REPLIES_PATTERN = re.compile(
+    r"<!--\s*REVIEW_REPLIES_JSON\s*\n(.*?)\n\s*-->",
+    re.DOTALL,
+)
+
+
+def find_latest_comment_with_replies(owner: str, repo: str, pr_number: int, token: str) -> dict | None:
+    """Find the latest PR comment that contains REVIEW_REPLIES_JSON."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments?per_page=10&sort=created&direction=desc"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    result = safe_request(url, headers=headers)
+    for comment in result:
+        body = comment.get("body", "")
+        if _REPLIES_PATTERN.search(body):
+            return comment
+    return None
+
+
 def extract_issues_json(review_text: str) -> tuple[str, list[dict] | None]:
     match = _JSON_BLOCK_PATTERN.search(review_text)
     if not match:
@@ -210,26 +232,21 @@ def main():
     owner, repo, pr_number = get_github_info()
     token = get_env("GITHUB_TOKEN", required=True)
 
-    # Find the latest comment with JSON block
+    # Find the latest comment with JSON block (either REVIEW_ISSUES_JSON or REVIEW_REPLIES_JSON)
     comment = find_latest_comment(owner, repo, pr_number, token)
     if not comment:
-        print("No comment with REVIEW_ISSUES_JSON found. Skipping inline comments.")
-        return
+        # Also check for REVIEW_REPLIES_JSON if REVIEW_ISSUES_JSON not found
+        comment = find_latest_comment_with_replies(owner, repo, pr_number, token)
+        if not comment:
+            print("No comment with REVIEW_ISSUES_JSON or REVIEW_REPLIES_JSON found. Skipping.")
+            return
 
     comment_id = comment["id"]
     body = comment["body"]
-    print(f"Found comment {comment_id} with issues JSON")
+    print(f"Found comment {comment_id}")
 
-    # Extract issues
-    clean_text, issues = extract_issues_json(body)
-    if not issues:
-        print("No valid issues found in JSON block.")
-        return
-
-    print(f"Found {len(issues)} issues")
-
-    # Extract and post replies to user comments
-    clean_text, reply_list = extract_replies_json(clean_text)
+    # Extract and post replies to user comments (process first since it's more important)
+    clean_text, reply_list = extract_replies_json(body)
     if reply_list:
         try:
             threads = fetch_unresolved_threads(owner, repo, pr_number, token)
@@ -247,6 +264,31 @@ def main():
                         print(f"WARNING: Failed to reply to comment {cid}: {e}", file=sys.stderr)
         except Exception as e:
             print(f"WARNING: Could not process replies: {e}", file=sys.stderr)
+
+    # Extract and post inline comments (if REVIEW_ISSUES_JSON exists)
+    clean_text, issues = extract_issues_json(clean_text)
+    if not issues:
+        print("No valid issues found in JSON block.")
+        return
+
+    print(f"Found {len(issues)} issues")
+
+    # Update summary comment to strip Key Issues
+    summary_text = strip_key_issues(clean_text)
+    if summary_text != clean_text:
+        update_comment(owner, repo, comment_id, token, summary_text)
+        print(f"Updated summary comment (stripped Key Issues)")
+
+    # Post inline comments
+    commit_sha = get_latest_commit(owner, repo, pr_number, token)
+    if commit_sha:
+        success = post_inline_comments(owner, repo, pr_number, token, issues, commit_sha)
+        if success:
+            print("Inline comments posted successfully")
+        else:
+            print("Failed to post inline comments", file=sys.stderr)
+    else:
+        print("WARNING: Could not get commit SHA for inline review", file=sys.stderr)
 
     # Update summary comment to strip Key Issues
     summary_text = strip_key_issues(clean_text)
