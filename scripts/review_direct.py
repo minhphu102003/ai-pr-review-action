@@ -3,17 +3,19 @@
 Direct LLM API engine for AI PR Review.
 Supports OpenAI and Anthropic APIs.
 Uses only stdlib (urllib, json, os, sys, fnmatch) — no pip install needed.
-Requires Python 3.9+.
+Requires Python 3.10+.
 """
 
 import fnmatch
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
 HTTP_TIMEOUT = 120
+REVIEW_SIGNATURE = "*AI Review by ai-pr-review-action*"
 
 
 def get_env(name: str, required: bool = False) -> str:
@@ -24,39 +26,69 @@ def get_env(name: str, required: bool = False) -> str:
     return val
 
 
-def safe_request(url: str, data: bytes | None = None, headers: dict | None = None) -> dict:
-    """HTTP request with error handling and timeout."""
+def safe_request(url: str, data: bytes | None = None, headers: dict | None = None, max_retries: int = 3) -> dict:
+    """HTTP request with error handling, timeout, and retry for transient errors."""
     req = urllib.request.Request(url, data=data, headers=headers or {}, method="POST" if data else "GET")
-    try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-            raw = resp.read().decode("utf-8")
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                print(f"Non-JSON response from {url}: {raw[:500]}", file=sys.stderr)
-                sys.exit(1)
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")[:500]
-        print(f"HTTP {e.code} from {url}", file=sys.stderr)
-        print(f"Response: {body}", file=sys.stderr)
-        if e.code == 401:
-            print("Hint: Check your API key is correct and not expired.", file=sys.stderr)
-        elif e.code == 403:
-            print("Hint: Access denied. Check API key permissions.", file=sys.stderr)
-        elif e.code == 404:
-            print("Hint: Resource not found. The PR may have been closed or deleted.", file=sys.stderr)
-        elif e.code == 429:
-            print("Hint: Rate limited. Try again later or use a different provider.", file=sys.stderr)
-        elif e.code >= 500:
-            print("Hint: Server error. The API may be experiencing issues.", file=sys.stderr)
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"Connection error: {e.reason}", file=sys.stderr)
-        print("Hint: Check your network connection and base URL.", file=sys.stderr)
-        sys.exit(1)
-    except TimeoutError:
-        print(f"Request timed out after {HTTP_TIMEOUT}s", file=sys.stderr)
-        sys.exit(1)
+
+    for attempt in range(max_retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+                raw = resp.read().decode("utf-8")
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError:
+                    print(f"Non-JSON response from {url}: {raw[:500]}", file=sys.stderr)
+                    sys.exit(1)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")[:500]
+
+            # Retry on 429 and 5xx with exponential backoff
+            if e.code == 429 or e.code >= 500:
+                if attempt < max_retries:
+                    # Respect Retry-After header
+                    retry_after = e.headers.get("Retry-After")
+                    if retry_after and retry_after.isdigit():
+                        delay = int(retry_after)
+                    else:
+                        delay = 2 ** (attempt + 1)  # 2, 4, 8 seconds
+                    print(f"HTTP {e.code} from {url}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})...", file=sys.stderr)
+                    time.sleep(delay)
+                    continue
+
+            print(f"HTTP {e.code} from {url}", file=sys.stderr)
+            print(f"Response: {body}", file=sys.stderr)
+            if e.code == 401:
+                print("Hint: Check your API key is correct and not expired.", file=sys.stderr)
+            elif e.code == 403:
+                print("Hint: Access denied. Check API key permissions.", file=sys.stderr)
+            elif e.code == 404:
+                print("Hint: Resource not found. The PR may have been closed or deleted.", file=sys.stderr)
+            elif e.code == 429:
+                print("Hint: Rate limited. Try again later or use a different provider.", file=sys.stderr)
+            elif e.code >= 500:
+                print("Hint: Server error. The API may be experiencing issues.", file=sys.stderr)
+            sys.exit(1)
+        except urllib.error.URLError as e:
+            if attempt < max_retries:
+                delay = 2 ** (attempt + 1)
+                print(f"Connection error: {e.reason}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})...", file=sys.stderr)
+                time.sleep(delay)
+                continue
+            print(f"Connection error: {e.reason}", file=sys.stderr)
+            print("Hint: Check your network connection and base URL.", file=sys.stderr)
+            sys.exit(1)
+        except TimeoutError:
+            if attempt < max_retries:
+                delay = 2 ** (attempt + 1)
+                print(f"Request timed out after {HTTP_TIMEOUT}s, retrying in {delay}s (attempt {attempt + 1}/{max_retries})...", file=sys.stderr)
+                time.sleep(delay)
+                continue
+            print(f"Request timed out after {HTTP_TIMEOUT}s", file=sys.stderr)
+            sys.exit(1)
+
+    # Should not reach here, but just in case
+    print("All retry attempts exhausted", file=sys.stderr)
+    sys.exit(1)
 
 
 def detect_provider() -> tuple[str, str, str]:
@@ -87,6 +119,10 @@ def get_github_info() -> tuple[str, str, int]:
     if event_path:
         with open(event_path, encoding="utf-8") as f:
             event = json.load(f)
+        # For issue_comment events, verify it's on a PR (not a regular issue)
+        if "issue" in event and "pull_request" not in event.get("issue", {}):
+            print("Comment is not on a PR. Skipping.", file=sys.stderr)
+            sys.exit(0)
         pr_number = event.get("pull_request", {}).get("number") or event.get("issue", {}).get("number")
         if pr_number:
             return owner, repo_name, int(pr_number)
@@ -121,7 +157,11 @@ def get_pr_files(owner: str, repo: str, pr_number: int, token: str) -> list[dict
     """Get list of changed files in PR (handles pagination)."""
     all_files = []
     page = 1
+    max_pages = 20  # 2000 files max
     while True:
+        if page > max_pages:
+            print(f"WARNING: Exceeded {max_pages} pages of files. Stopping pagination.", file=sys.stderr)
+            break
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files?per_page=100&page={page}"
         headers = {
             "Authorization": f"token {token}",
@@ -171,52 +211,73 @@ def filter_diff(diff: str, files: list[dict], exclude_patterns: str) -> str:
     # Filter diff hunks by file path, also strip binary files
     filtered_parts = []
     skip = False
+    in_header = False  # Between diff --git and first @@
 
     for line in diff.split("\n"):
         if line.startswith("diff --git"):
             parts = line.split(" b/", 1)
             current_file = parts[1] if len(parts) > 1 else ""
             skip = current_file in excluded_files
+            in_header = True
             if skip:
                 continue
             filtered_parts.append(line)
             continue
         if skip:
             continue
-        if line.startswith("Binary files") and "differ" in line:
+        # Only detect binary files in the header region (before first @@)
+        if in_header and line.startswith("Binary files") and "differ" in line:
             # Remove lines belonging to this binary file's diff header
             while filtered_parts and not filtered_parts[-1].startswith("diff --git"):
                 filtered_parts.pop()
             if filtered_parts:
                 filtered_parts.pop()  # Remove the diff --git header
+            in_header = False
             continue
+        if line.startswith("@@"):
+            in_header = False
         filtered_parts.append(line)
 
     return "\n".join(filtered_parts)
 
 
 def truncate_diff(diff: str, max_chars: int = 100000) -> str:
-    """Truncate diff at a file boundary if too large."""
+    """Truncate diff at a file or hunk boundary if too large."""
     if len(diff) <= max_chars:
         return diff
 
-    # Find last "diff --git" boundary before max_chars
     truncated = diff[:max_chars]
+
+    # Try file boundary first
     last_boundary = truncated.rfind("\ndiff --git ")
     if last_boundary > 0:
-        truncated = truncated[:last_boundary]
+        return truncated[:last_boundary] + "\n\n... [diff truncated — too large for review]"
+
+    # Fallback to hunk boundary
+    last_hunk = truncated.rfind("\n@@")
+    if last_hunk > 0:
+        return truncated[:last_hunk] + "\n\n... [diff truncated — too large for review]"
+
+    # Last resort: cut at last newline
+    last_newline = truncated.rfind("\n")
+    if last_newline > 0:
+        return truncated[:last_newline] + "\n\n... [diff truncated — too large for review]"
 
     return truncated + "\n\n... [diff truncated — too large for review]"
 
 
-def call_openai(api_key: str, model: str, prompt: str, diff: str) -> str:
-    """Call OpenAI or OpenAI-compatible API."""
-    base_url = get_env("OPENAI_BASE_URL") or "https://api.openai.com/v1"
-    base_url = base_url.rstrip("/")
+def _build_api_url(base_url_env: str, default_url: str, path: str) -> str:
+    """Build API URL from base_url, avoiding double /v1."""
+    base_url = (get_env(base_url_env) or default_url).rstrip("/")
     # Avoid double /v1 if user set base_url with /v1
     if base_url.endswith("/v1"):
         base_url = base_url[:-3]
-    url = f"{base_url}/v1/chat/completions"
+    return f"{base_url}/v1/{path}"
+
+
+def call_openai(api_key: str, model: str, prompt: str, diff: str) -> str:
+    """Call OpenAI or OpenAI-compatible API."""
+    url = _build_api_url("OPENAI_BASE_URL", "https://api.openai.com", "chat/completions")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -244,12 +305,7 @@ def call_openai(api_key: str, model: str, prompt: str, diff: str) -> str:
 
 def call_anthropic(api_key: str, model: str, prompt: str, diff: str) -> str:
     """Call Anthropic or Anthropic-compatible API."""
-    base_url = get_env("ANTHROPIC_BASE_URL") or "https://api.anthropic.com"
-    base_url = base_url.rstrip("/")
-    # Avoid double /v1 if user set base_url with /v1
-    if base_url.endswith("/v1"):
-        base_url = base_url[:-3]
-    url = f"{base_url}/v1/messages"
+    url = _build_api_url("ANTHROPIC_BASE_URL", "https://api.anthropic.com", "messages")
 
     headers = {
         "x-api-key": api_key,
@@ -273,11 +329,48 @@ def call_anthropic(api_key: str, model: str, prompt: str, diff: str) -> str:
     if "content" not in result or not result["content"]:
         print(f"Unexpected Anthropic response: {json.dumps(result)[:500]}", file=sys.stderr)
         sys.exit(1)
-    return result["content"][0]["text"]
+    for block in result["content"]:
+        if block.get("type") == "text":
+            return block["text"]
+    print("No text content in Anthropic response", file=sys.stderr)
+    sys.exit(1)
 
 
-def post_comment(owner: str, repo: str, pr_number: int, token: str, body: str):
-    """Post a comment on the PR."""
+def find_existing_comment(owner: str, repo: str, pr_number: int, token: str) -> int | None:
+    """Find existing review comment by signature. Returns comment ID or None."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments?per_page=100"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    result = safe_request(url, headers=headers)
+    for comment in result:
+        if REVIEW_SIGNATURE in comment.get("body", ""):
+            return comment["id"]
+    return None
+
+
+def update_comment(owner: str, repo: str, comment_id: int, token: str, body: str):
+    """Update an existing comment."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/comments/{comment_id}"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    payload = json.dumps({"body": body}).encode("utf-8")
+    result = safe_request(url, data=payload, headers=headers)
+    print(f"Review comment updated: {result.get('html_url', 'ok')}")
+
+
+def post_comment(owner: str, repo: str, pr_number: int, token: str, body: str, update_existing: bool = True):
+    """Post or update a comment on the PR."""
+    if update_existing:
+        comment_id = find_existing_comment(owner, repo, pr_number, token)
+        if comment_id:
+            update_comment(owner, repo, comment_id, token, body)
+            return
     url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
     headers = {
         "Authorization": f"token {token}",
@@ -295,6 +388,7 @@ def main():
     token = get_env("GITHUB_TOKEN", required=True)
     prompt = get_env("PROMPT", required=True)
     exclude = get_env("EXCLUDE")
+    update_existing = get_env("UPDATE_COMMENT").lower() != "false"
 
     print(f"Provider: {provider}, Model: {model}")
     print(f"PR: {owner}/{repo}#{pr_number}")
@@ -308,11 +402,18 @@ def main():
     diff = filter_diff(diff, files, exclude)
     print(f"Diff size after filtering: {len(diff)} chars")
 
+    # Warn if diff may be truncated by GitHub's 300-file limit
+    if files:
+        diff_file_count = diff.count("\ndiff --git ")
+        if len(files) > diff_file_count:
+            print(f"WARNING: GitHub API returned diff for {diff_file_count} of {len(files)} files. PR may be too large for complete review.", file=sys.stderr)
+
     # Skip if no reviewable changes
     if not diff.strip():
         print("No reviewable changes found. Skipping LLM call.")
         post_comment(owner, repo, pr_number, token,
-                     "> [!NOTE]\n> No reviewable changes found in this PR.")
+                     "> [!NOTE]\n> No reviewable changes found in this PR.",
+                     update_existing=update_existing)
         return
 
     # Truncate if needed
@@ -328,7 +429,7 @@ def main():
     print(f"Review length: {len(review)} chars")
 
     # Post comment
-    post_comment(owner, repo, pr_number, token, review)
+    post_comment(owner, repo, pr_number, token, review, update_existing=update_existing)
 
 
 if __name__ == "__main__":

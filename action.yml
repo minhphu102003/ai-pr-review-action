@@ -47,6 +47,10 @@ inputs:
     description: 'Glob patterns to exclude from review (comma-separated)'
     required: false
     default: ''
+  update_comment:
+    description: 'Update existing review comment instead of creating a new one'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -54,8 +58,10 @@ runs:
     - name: Validate engine input
       if: inputs.engine != 'opencode' && inputs.engine != 'direct'
       shell: bash
+      env:
+        INPUT_ENGINE: ${{ inputs.engine }}
       run: |
-        echo "::error::Invalid engine '${{ inputs.engine }}'. Must be 'opencode' or 'direct'."
+        echo "::error::Invalid engine '$INPUT_ENGINE'. Must be 'opencode' or 'direct'."
         exit 1
 
     - id: resolve-prompt
@@ -63,9 +69,17 @@ runs:
       env:
         INPUT_PROMPT_FILE: ${{ inputs.prompt_file }}
         ACTION_PATH: ${{ github.action_path }}
+        RUN_ID: ${{ github.run_id }}
       run: |
         PROMPT_PATH=""
         if [ -n "$INPUT_PROMPT_FILE" ] && [ -f "$INPUT_PROMPT_FILE" ]; then
+          # Validate file extension
+          case "$INPUT_PROMPT_FILE" in
+            *.txt|*.md|*.prompt) ;;
+            *)
+              echo "::warning::Prompt file '$INPUT_PROMPT_FILE' has unusual extension. Expected .txt, .md, or .prompt."
+              ;;
+          esac
           PROMPT_PATH="$INPUT_PROMPT_FILE"
           echo "Using custom prompt: $PROMPT_PATH"
         elif [ -f ".github/prompts/review.txt" ]; then
@@ -75,16 +89,22 @@ runs:
           PROMPT_PATH="$ACTION_PATH/prompts/review.txt"
           echo "Using built-in prompt: $PROMPT_PATH"
         fi
+        # Validate prompt size (GitHub Actions env var limit ~48KB)
+        PROMPT_SIZE=$(wc -c < "$PROMPT_PATH")
+        if [ "$PROMPT_SIZE" -gt 32768 ]; then
+          echo "::warning::Prompt is ${PROMPT_SIZE} bytes (>${ 32768 } byte limit recommended). May exceed GitHub Actions env var limits."
+        fi
+        DELIMITER="ghadelim_${RUN_ID}"
         {
-          echo 'PROMPT<<ghadelim_8f3a2b1c'
+          echo "PROMPT<<${DELIMITER}"
           cat "$PROMPT_PATH"
-          echo 'ghadelim_8f3a2b1c'
+          echo "${DELIMITER}"
         } >> "$GITHUB_OUTPUT"
 
     # Engine: OpenCode (default)
     - name: Review with OpenCode
       if: inputs.engine == 'opencode'
-      uses: anomalyco/opencode/github@latest
+      uses: anomalyco/opencode/github@v1
       env:
         OPENCODE_API_KEY: ${{ inputs.opencode_api_key }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
@@ -106,5 +126,6 @@ runs:
         MODEL: ${{ inputs.model }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         EXCLUDE: ${{ inputs.exclude }}
+        UPDATE_COMMENT: ${{ inputs.update_comment }}
         PROMPT: ${{ steps.resolve-prompt.outputs.PROMPT }}
       run: python3 "$ACTION_PATH/scripts/review_direct.py"
