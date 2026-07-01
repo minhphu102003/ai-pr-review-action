@@ -148,8 +148,6 @@
 
   ### Flow Overview
 
-  (Only if the PR meets mermaid_diagram criteria. Skip for minor changes.)
-
   <details>
   <summary>Mermaid diagram</summary>
 
@@ -185,7 +183,7 @@
   One paragraph: overall quality, main concerns, recommendation (approve / request changes / needs discussion).
 
   ---
-  *AI Review by OpenCode Zen | Model: mimo-v2.5-free*
+  *AI Review by ai-pr-review-action*
 
   ---
 

@@ -3,6 +3,7 @@
 Direct LLM API engine for AI PR Review.
 Supports OpenAI and Anthropic APIs.
 Uses only stdlib (urllib, json, os, sys, fnmatch) — no pip install needed.
+Requires Python 3.9+.
 """
 
 import fnmatch
@@ -11,6 +12,8 @@ import os
 import sys
 import urllib.error
 import urllib.request
+
+HTTP_TIMEOUT = 120
 
 
 def get_env(name: str, required: bool = False) -> str:
@@ -21,10 +24,41 @@ def get_env(name: str, required: bool = False) -> str:
     return val
 
 
-def detect_provider() -> tuple[str, str]:
-    """Detect LLM provider from available API keys. Returns (provider, api_key)."""
+def safe_request(url: str, data: bytes | None = None, headers: dict | None = None) -> dict:
+    """HTTP request with error handling and timeout."""
+    req = urllib.request.Request(url, data=data, headers=headers or {}, method="POST" if data else "GET")
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:500]
+        print(f"HTTP {e.code} from {url}", file=sys.stderr)
+        print(f"Response: {body}", file=sys.stderr)
+        if e.code == 401:
+            print("Hint: Check your API key is correct and not expired.", file=sys.stderr)
+        elif e.code == 403:
+            print("Hint: Access denied. Check API key permissions.", file=sys.stderr)
+        elif e.code == 429:
+            print("Hint: Rate limited. Try again later or use a different provider.", file=sys.stderr)
+        elif e.code >= 500:
+            print("Hint: Server error. The API may be experiencing issues.", file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Connection error: {e.reason}", file=sys.stderr)
+        print("Hint: Check your network connection and base URL.", file=sys.stderr)
+        sys.exit(1)
+    except TimeoutError:
+        print(f"Request timed out after {HTTP_TIMEOUT}s", file=sys.stderr)
+        sys.exit(1)
+
+
+def detect_provider() -> tuple[str, str, str]:
+    """Detect LLM provider from available API keys."""
     openai_key = get_env("OPENAI_API_KEY")
     anthropic_key = get_env("ANTHROPIC_API_KEY")
+
+    if anthropic_key and openai_key:
+        print("WARNING: Both OPENAI_API_KEY and ANTHROPIC_API_KEY set. Using Anthropic.", file=sys.stderr)
 
     if anthropic_key:
         model = get_env("MODEL") or "claude-haiku-4-5-20251001"
@@ -63,71 +97,118 @@ def get_pr_diff(owner: str, repo: str, pr_number: int, token: str) -> str:
         "User-Agent": "ai-pr-review-action",
     }
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req) as resp:
-        return resp.read().decode("utf-8")
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            return resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        print(f"HTTP {e.code} getting PR diff: {e.reason}", file=sys.stderr)
+        if e.code == 404:
+            print("Hint: PR not found. Check repository and PR number.", file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Connection error getting PR diff: {e.reason}", file=sys.stderr)
+        sys.exit(1)
 
 
 def get_pr_files(owner: str, repo: str, pr_number: int, token: str) -> list[dict]:
-    """Get list of changed files in PR."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files?per_page=100"
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "ai-pr-review-action",
-    }
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    """Get list of changed files in PR (handles pagination)."""
+    all_files = []
+    page = 1
+    while True:
+        url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files?per_page=100&page={page}"
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "ai-pr-review-action",
+        }
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+                files = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            print(f"HTTP {e.code} getting PR files: {e.reason}", file=sys.stderr)
+            break
+        except urllib.error.URLError as e:
+            print(f"Connection error getting PR files: {e.reason}", file=sys.stderr)
+            break
+
+        if not files:
+            break
+        all_files.extend(files)
+        if len(files) < 100:
+            break
+        page += 1
+
+    return all_files
 
 
 def filter_diff(diff: str, files: list[dict], exclude_patterns: str) -> str:
-    """Filter out excluded files from diff."""
+    """Filter out excluded files and binary files from diff."""
     if not exclude_patterns:
-        return diff
+        exclude_patterns = ""
 
     patterns = [p.strip() for p in exclude_patterns.split(",") if p.strip()]
-    if not patterns:
-        return diff
-
     excluded_files = set()
-    for f in files:
-        filename = f.get("filename", "")
-        for pattern in patterns:
-            if fnmatch.fnmatch(filename, pattern):
-                excluded_files.add(filename)
-                break
 
-    if not excluded_files:
+    if patterns:
+        for f in files:
+            filename = f.get("filename", "")
+            for pattern in patterns:
+                if fnmatch.fnmatch(filename, pattern):
+                    excluded_files.add(filename)
+                    break
+
+    if not excluded_files and not diff:
         return diff
 
-    # Filter diff hunks by file path
+    # Filter diff hunks by file path, also strip binary files
     filtered_parts = []
-    current_file = None
     skip = False
 
     for line in diff.split("\n"):
         if line.startswith("diff --git"):
-            # Extract filename from "diff --git a/path b/path"
             parts = line.split(" b/", 1)
             current_file = parts[1] if len(parts) > 1 else ""
             skip = current_file in excluded_files
-        if not skip:
-            filtered_parts.append(line)
+        if skip:
+            continue
+        # Skip binary file diffs
+        if line.startswith("Binary files") and "differ" in line:
+            # Remove the last file header we added
+            while filtered_parts and filtered_parts[-1].startswith("diff --git"):
+                filtered_parts.pop()
+                # Also remove subsequent lines for this file header
+            while filtered_parts and not filtered_parts[-1].startswith("diff --git"):
+                filtered_parts.pop()
+            continue
+        filtered_parts.append(line)
 
     return "\n".join(filtered_parts)
 
 
 def truncate_diff(diff: str, max_chars: int = 100000) -> str:
-    """Truncate diff if too large for LLM context."""
+    """Truncate diff at a file boundary if too large."""
     if len(diff) <= max_chars:
         return diff
-    return diff[:max_chars] + "\n\n... [diff truncated — too large for review]"
+
+    # Find last "diff --git" boundary before max_chars
+    truncated = diff[:max_chars]
+    last_boundary = truncated.rfind("\ndiff --git ")
+    if last_boundary > 0:
+        truncated = truncated[:last_boundary]
+
+    return truncated + "\n\n... [diff truncated — too large for review]"
 
 
 def call_openai(api_key: str, model: str, prompt: str, diff: str) -> str:
-    """Call OpenAI API."""
+    """Call OpenAI or OpenAI-compatible API."""
     base_url = get_env("OPENAI_BASE_URL") or "https://api.openai.com/v1"
-    url = f"{base_url.rstrip('/')}/chat/completions"
+    base_url = base_url.rstrip("/")
+    # Avoid double /v1 if user set base_url with /v1
+    if base_url.endswith("/v1"):
+        base_url = base_url[:-3]
+    url = f"{base_url}/v1/chat/completions"
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -142,16 +223,19 @@ def call_openai(api_key: str, model: str, prompt: str, diff: str) -> str:
         "temperature": 0.3,
     }).encode("utf-8")
 
-    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
+    result = safe_request(url, data=body, headers=headers)
     return result["choices"][0]["message"]["content"]
 
 
 def call_anthropic(api_key: str, model: str, prompt: str, diff: str) -> str:
-    """Call Anthropic API."""
+    """Call Anthropic or Anthropic-compatible API."""
     base_url = get_env("ANTHROPIC_BASE_URL") or "https://api.anthropic.com"
-    url = f"{base_url.rstrip('/')}/v1/messages"
+    base_url = base_url.rstrip("/")
+    # Avoid double /v1 if user set base_url with /v1
+    if base_url.endswith("/v1"):
+        base_url = base_url[:-3]
+    url = f"{base_url}/v1/messages"
+
     headers = {
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
@@ -160,15 +244,14 @@ def call_anthropic(api_key: str, model: str, prompt: str, diff: str) -> str:
     body = json.dumps({
         "model": model,
         "max_tokens": 4096,
+        "temperature": 0.3,
         "system": prompt,
         "messages": [
             {"role": "user", "content": f"Here is the PR diff to review:\n\n```diff\n{diff}\n```"},
         ],
     }).encode("utf-8")
 
-    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
+    result = safe_request(url, data=body, headers=headers)
     return result["content"][0]["text"]
 
 
@@ -181,9 +264,7 @@ def post_comment(owner: str, repo: str, pr_number: int, token: str, body: str):
         "User-Agent": "ai-pr-review-action",
     }
     payload = json.dumps({"body": body}).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
+    result = safe_request(url, data=payload, headers=headers)
     print(f"Review comment posted: {result.get('html_url', 'ok')}")
 
 
@@ -201,11 +282,17 @@ def main():
     diff = get_pr_diff(owner, repo, pr_number, token)
     print(f"Diff size: {len(diff)} chars")
 
-    # Filter excluded files
-    if exclude:
-        files = get_pr_files(owner, repo, pr_number, token)
-        diff = filter_diff(diff, files, exclude)
-        print(f"Diff size after exclusions: {len(diff)} chars")
+    # Filter excluded files and binary files
+    files = get_pr_files(owner, repo, pr_number, token) if exclude else []
+    diff = filter_diff(diff, files, exclude)
+    print(f"Diff size after filtering: {len(diff)} chars")
+
+    # Skip if no reviewable changes
+    if not diff.strip():
+        print("No reviewable changes found. Skipping LLM call.")
+        post_comment(owner, repo, pr_number, token,
+                     "> [!NOTE]\n> No reviewable changes found in this PR.")
+        return
 
     # Truncate if needed
     diff = truncate_diff(diff)

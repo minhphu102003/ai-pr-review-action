@@ -51,24 +51,34 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - id: resolve-prompt
+    - name: Validate engine input
+      if: inputs.engine != 'opencode' && inputs.engine != 'direct'
       shell: bash
       run: |
+        echo "::error::Invalid engine '${{ inputs.engine }}'. Must be 'opencode' or 'direct'."
+        exit 1
+
+    - id: resolve-prompt
+      shell: bash
+      env:
+        INPUT_PROMPT_FILE: ${{ inputs.prompt_file }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
         PROMPT_PATH=""
-        if [ -n "${{ inputs.prompt_file }}" ] && [ -f "${{ inputs.prompt_file }}" ]; then
-          PROMPT_PATH="${{ inputs.prompt_file }}"
+        if [ -n "$INPUT_PROMPT_FILE" ] && [ -f "$INPUT_PROMPT_FILE" ]; then
+          PROMPT_PATH="$INPUT_PROMPT_FILE"
           echo "Using custom prompt: $PROMPT_PATH"
         elif [ -f ".github/prompts/review.txt" ]; then
           PROMPT_PATH=".github/prompts/review.txt"
           echo "Using repo prompt: $PROMPT_PATH"
         else
-          PROMPT_PATH="${{ github.action_path }}/prompts/review.txt"
+          PROMPT_PATH="$ACTION_PATH/prompts/review.txt"
           echo "Using built-in prompt: $PROMPT_PATH"
         fi
         {
-          echo 'PROMPT<<EOF'
+          echo 'PROMPT<<ghadelim_8f3a2b1c'
           cat "$PROMPT_PATH"
-          echo EOF
+          echo 'ghadelim_8f3a2b1c'
         } >> "$GITHUB_OUTPUT"
 
     # Engine: OpenCode (default)
@@ -88,6 +98,7 @@ runs:
       if: inputs.engine == 'direct'
       shell: bash
       env:
+        ACTION_PATH: ${{ github.action_path }}
         OPENAI_API_KEY: ${{ inputs.openai_api_key }}
         OPENAI_BASE_URL: ${{ inputs.openai_base_url }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
@@ -96,4 +107,4 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github_token }}
         EXCLUDE: ${{ inputs.exclude }}
         PROMPT: ${{ steps.resolve-prompt.outputs.PROMPT }}
-      run: python3 "${{ github.action_path }}/scripts/review_direct.py"
+      run: python3 "$ACTION_PATH/scripts/review_direct.py"
