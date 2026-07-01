@@ -1,0 +1,18 @@
+name: AI PR Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: gpt-4.1-mini
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
