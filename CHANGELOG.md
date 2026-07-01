@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.0.14
+
+- Add `issues: write` permission for OpenCode engine reactions API (`/issues/{n}/reactions`)
+
 ## v0.0.13
 
 - Revert `reactions: write` permission — not a valid GitHub Actions permission

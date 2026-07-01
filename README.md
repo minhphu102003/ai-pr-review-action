@@ -22,12 +22,13 @@ on:
 permissions:
   pull-requests: write
   contents: read
+  issues: write
 jobs:
   review:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: minhphu102003/ai-pr-review-action@v0.0.13
+      - uses: minhphu102003/ai-pr-review-action@v0.0.14
         with:
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
 ```
@@ -37,7 +38,7 @@ jobs:
 ### Direct OpenAI
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.13
+      - uses: minhphu102003/ai-pr-review-action@v0.0.14
         with:
           engine: direct
           model: gpt-4.1-mini
@@ -47,7 +48,7 @@ jobs:
 ### Direct Anthropic
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.13
+      - uses: minhphu102003/ai-pr-review-action@v0.0.14
         with:
           engine: direct
           model: claude-haiku-4-5-20251001
@@ -64,6 +65,7 @@ The action masks all API key values in workflow logs automatically.
 |------------|-----|
 | `pull-requests: write` | Post review comments |
 | `contents: read` | Read PR files |
+| `issues: write` | Manage review reactions (OpenCode engine) |
 | `contents: write` | *(OpenCode only)* Auto-commit changes |
 
 ## Inputs
