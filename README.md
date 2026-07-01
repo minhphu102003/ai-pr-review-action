@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
 ```
@@ -38,7 +38,7 @@ jobs:
 ### Direct Anthropic API (Haiku — fast, cheap, 200k context)
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           engine: direct
           model: claude-haiku-4-5-20251001
@@ -48,7 +48,7 @@ jobs:
 ### Direct OpenAI API (GPT-4.1 Mini — fast, cheap, 128k context)
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           engine: direct
           model: gpt-4.1-mini
@@ -85,7 +85,7 @@ Use `openai_base_url` or `anthropic_base_url` to connect to any OpenAI/Anthropic
 
 **OpenRouter:**
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           engine: direct
           model: anthropic/claude-3.5-haiku
@@ -95,7 +95,7 @@ Use `openai_base_url` or `anthropic_base_url` to connect to any OpenAI/Anthropic
 
 **Groq:**
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           engine: direct
           model: llama-3.1-70b-versatile
@@ -105,7 +105,7 @@ Use `openai_base_url` or `anthropic_base_url` to connect to any OpenAI/Anthropic
 
 **Together AI:**
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           engine: direct
           model: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
@@ -115,7 +115,7 @@ Use `openai_base_url` or `anthropic_base_url` to connect to any OpenAI/Anthropic
 
 **Ollama (local):**
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           engine: direct
           model: llama3.1
@@ -131,7 +131,7 @@ The action includes a built-in prompt optimized for thorough code review. You ca
 
 **Option 2:** Specify a custom path:
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           prompt_file: my-custom-review-prompt.txt
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
@@ -169,7 +169,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
 
@@ -186,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: minhphu102003/ai-pr-review-action@v0.0.4
+      - uses: minhphu102003/ai-pr-review-action@v0.0.5
         with:
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
 ```
