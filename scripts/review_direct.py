@@ -9,6 +9,7 @@ Requires Python 3.10+.
 import fnmatch
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -494,6 +495,153 @@ def post_comment(owner: str, repo: str, pr_number: int, token: str, body: str, u
     print(f"Review comment posted: {result.get('html_url', 'ok')} (id: {result.get('id', '?')})")
 
 
+# --- Inline review comments ---
+
+_JSON_BLOCK_PATTERN = re.compile(
+    r"<!--\s*REVIEW_ISSUES_JSON\s*\n(.*?)\n\s*-->",
+    re.DOTALL,
+)
+
+
+def extract_issues_json(review_text: str) -> tuple[str, list[dict] | None]:
+    """Extract structured issues JSON from review text.
+
+    Returns (clean_text, issues) where clean_text has the JSON block removed.
+    If no JSON block found or parsing fails, returns (review_text, None).
+    """
+    match = _JSON_BLOCK_PATTERN.search(review_text)
+    if not match:
+        return review_text, None
+
+    json_str = match.group(1).strip()
+    try:
+        issues = json.loads(json_str)
+        if not isinstance(issues, list):
+            return review_text, None
+        # Remove the JSON block from the review text
+        clean_text = review_text[: match.start()].rstrip()
+        return clean_text, issues
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"WARNING: Failed to parse issues JSON: {e}", file=sys.stderr)
+        return review_text, None
+
+
+def get_latest_commit(owner: str, repo: str, pr_number: int, token: str) -> str | None:
+    """Get the latest commit SHA on the PR head."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    result = safe_request(url, headers=headers)
+    return result.get("head", {}).get("sha")
+
+
+def find_existing_review(owner: str, repo: str, pr_number: int, token: str) -> int | None:
+    """Find existing AI review by signature. Returns review ID or None."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews?per_page=100"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    result = safe_request(url, headers=headers)
+    for review in result:
+        if REVIEW_SIGNATURE in review.get("body", ""):
+            return review["id"]
+    return None
+
+
+def delete_review(owner: str, repo: str, pr_number: int, review_id: int, token: str) -> bool:
+    """Delete an existing review. Returns True on success."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews/{review_id}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    try:
+        req = urllib.request.Request(url, headers=headers, method="DELETE")
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            return resp.status == 200
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: Could not delete review {review_id}: {e.code} {e.reason}", file=sys.stderr)
+        return False
+
+
+def post_inline_comments(
+    owner: str,
+    repo: str,
+    pr_number: int,
+    token: str,
+    issues: list[dict],
+    commit_sha: str,
+    summary_body: str,
+    update_existing: bool = True,
+) -> bool:
+    """Post inline review comments via PR Reviews API.
+
+    Falls back to single issue comment if review creation fails.
+    Returns True if inline review was posted successfully.
+    """
+    if not issues or not commit_sha:
+        return False
+
+    # Delete existing review if updating
+    if update_existing:
+        review_id = find_existing_review(owner, repo, pr_number, token)
+        if review_id:
+            delete_review(owner, repo, pr_number, review_id, token)
+
+    # Build review comments
+    comments = []
+    for issue in issues:
+        file_path = issue.get("file_path", "")
+        line = issue.get("line")
+        if not file_path or not line:
+            continue
+
+        severity = issue.get("severity", "NOTE")
+        title = issue.get("title", "Issue")
+        body = issue.get("body", "")
+
+        # Build comment body with severity indicator
+        severity_icon = {"CAUTION": "⚠️", "WARNING": "⚠️", "NOTE": "\U0001f4dd"}.get(severity, "\U0001f4dd")
+        comment_body = f"{severity_icon} **{title}**\n\n{body}"
+
+        comments.append({
+            "path": file_path,
+            "line": int(line),
+            "side": "RIGHT",
+            "body": comment_body,
+        })
+
+    if not comments:
+        return False
+
+    # Post review with inline comments
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    payload = json.dumps({
+        "body": summary_body,
+        "event": "COMMENT",
+        "comments": comments,
+    }).encode("utf-8")
+
+    try:
+        result = safe_request(url, data=payload, headers=headers)
+        print(f"Inline review posted: {result.get('html_url', 'ok')}")
+        return True
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: Inline review failed ({e.code}). Comments may reference lines outside the diff.", file=sys.stderr)
+        return False
+
+
 def main():
     # detect_provider() validates API keys and model name
     provider, api_key, model = detect_provider()
@@ -543,9 +691,25 @@ def main():
 
     print(f"Review length: {len(review)} chars")
 
-    # Sanitize and post comment
+    # Sanitize and extract issues
     review = sanitize_review(review)
-    post_comment(owner, repo, pr_number, token, review, update_existing=update_existing)
+    clean_text, issues = extract_issues_json(review)
+
+    # Post summary comment (non-resolvable)
+    post_comment(owner, repo, pr_number, token, clean_text, update_existing=update_existing)
+
+    # Post inline comments (resolvable)
+    if issues:
+        commit_sha = get_latest_commit(owner, repo, pr_number, token)
+        if commit_sha:
+            success = post_inline_comments(
+                owner, repo, pr_number, token, issues, commit_sha,
+                summary_body=clean_text, update_existing=update_existing,
+            )
+            if not success:
+                print("Inline review failed. Summary comment was still posted.", file=sys.stderr)
+        else:
+            print("WARNING: Could not get commit SHA for inline review.", file=sys.stderr)
 
 
 if __name__ == "__main__":

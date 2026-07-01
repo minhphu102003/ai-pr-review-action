@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.16
+
+- Add inline resolvable review comments via PR Reviews API
+- Each key issue becomes a separate inline comment on the specific file/line
+- Summary comment (non-resolvable) still posted with full review content
+- LLM outputs JSON block at end of review for structured issue extraction
+
 ## v0.0.15
 
 - Enforce review comment starts with `## PR Review` — no preamble text

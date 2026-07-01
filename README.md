@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: minhphu102003/ai-pr-review-action@v0.0.15
+      - uses: minhphu102003/ai-pr-review-action@v0.0.16
         with:
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
 ```
@@ -38,7 +38,7 @@ jobs:
 ### Direct OpenAI
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.15
+      - uses: minhphu102003/ai-pr-review-action@v0.0.16
         with:
           engine: direct
           model: gpt-4.1-mini
@@ -48,7 +48,7 @@ jobs:
 ### Direct Anthropic
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.15
+      - uses: minhphu102003/ai-pr-review-action@v0.0.16
         with:
           engine: direct
           model: claude-haiku-4-5-20251001

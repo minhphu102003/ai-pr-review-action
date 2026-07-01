@@ -207,3 +207,30 @@
   - MUST always include the Mermaid diagram section in every review.
   - Keep total comment under 3000 characters.
 </rules>
+
+<json_output>
+  After the review markdown, append a JSON block with extracted issues for inline comments.
+  Wrap it in an HTML comment: <!-- REVIEW_ISSUES_JSON ... -->
+
+  Format:
+  <!-- REVIEW_ISSUES_JSON
+  [
+    {
+      "severity": "CAUTION",
+      "title": "Issue Title",
+      "file_path": "path/to/file.py",
+      "line": 42,
+      "body": "Description of the issue and suggested fix."
+    }
+  ]
+  -->
+
+  Rules:
+  - Only include issues from the Key Issues section that have a specific file path and line number
+  - severity must be one of: "CAUTION", "WARNING", "NOTE"
+  - file_path must match a file in the PR diff (in backticks in the review)
+  - line must be the starting line number (integer)
+  - body should be a concise description (no code blocks needed)
+  - If no issues with file/line references exist, omit the JSON block entirely
+  - This JSON block is for machine parsing only -- the human-readable review is above
+</json_output>
