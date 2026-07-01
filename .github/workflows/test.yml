@@ -1,0 +1,20 @@
+name: Test OpenAI Direct
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  test-openai:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: gpt-4.1-mini
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
