@@ -225,7 +225,6 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
-        SKIP_INLINE_COMMENTS: 'true'
       run: python3 "$ACTION_PATH/scripts/post_inline.py"
 
     # Engine: Direct LLM API (OpenAI or Anthropic)
