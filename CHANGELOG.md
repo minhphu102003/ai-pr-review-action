@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.0.15
+
+- Enforce review comment starts with `## PR Review` — no preamble text
+
 ## v0.0.14
 
 - Add `issues: write` permission for OpenCode engine reactions API (`/issues/{n}/reactions`)

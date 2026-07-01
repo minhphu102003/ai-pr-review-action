@@ -87,6 +87,7 @@
 
 <output_format>
   Post a single comment using this EXACT markdown structure.
+  The comment MUST start directly with "## PR Review" — no preamble, no introduction, no explanation before it.
   Use GitHub callout syntax for severity: > [!CAUTION] for Critical (red), > [!WARNING] for Warning (yellow), > [!NOTE] for Suggestion (blue).
   Order sections by priority: Key Issues first (most important), then details.
 
