@@ -205,33 +205,6 @@ runs:
           echo "Review context fetched"
         fi
 
-    # Delete existing reviews to prevent duplicates (OpenCode engine)
-    - name: Clean existing reviews
-      if: inputs.engine == 'opencode'
-      shell: bash
-      env:
-        ACTION_PATH: ${{ github.action_path }}
-        GITHUB_TOKEN: ${{ inputs.github_token }}
-        EVENT_PATH: ${{ github.event_path }}
-        REPO: ${{ github.repository }}
-      run: |
-        PR_NUMBER=$(jq -r '.pull_request.number // .issue.number' "$EVENT_PATH")
-        OWNER="${REPO%%/*}"
-        REPO_NAME="${REPO##*/}"
-        python3 -c "
-        import json, os, sys, urllib.request
-        sys.path.insert(0, '${ACTION_PATH}/scripts')
-        from post_inline import find_existing_review, delete_review
-        owner, repo, pr = '$OWNER', '$REPO_NAME', int('$PR_NUMBER')
-        token = os.environ['GITHUB_TOKEN']
-        review_id = find_existing_review(owner, repo, pr, token)
-        if review_id:
-            delete_review(owner, repo, pr, review_id, token)
-            print(f'Deleted existing review {review_id}')
-        else:
-            print('No existing review found')
-        "
-
     # Engine: OpenCode (default)
     - name: Review with OpenCode
       if: inputs.engine == 'opencode'

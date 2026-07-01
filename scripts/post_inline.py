@@ -137,14 +137,26 @@ def find_existing_review(owner: str, repo: str, pr_number: int, token: str) -> i
     }
     result = safe_request(url, headers=headers)
     for review in result:
-        # Look for reviews with our signature OR reviews posted by bot with inline comments
+        # Look for reviews with our signature
         if REVIEW_SIGNATURE in review.get("body", ""):
             return review["id"]
-        # Also check for reviews posted by github-actions[bot] (OpenCode engine)
+    return None
+
+
+def has_bot_reviews(owner: str, repo: str, pr_number: int, token: str) -> bool:
+    """Check if bot already posted inline comments (to prevent duplicates)."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews?per_page=100"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    result = safe_request(url, headers=headers)
+    for review in result:
         user = review.get("user", {}).get("login", "")
         if user == "github-actions[bot]" and review.get("state") == "COMMENTED":
-            return review["id"]
-    return None
+            return True
+    return False
 
 
 def delete_review(owner: str, repo: str, pr_number: int, review_id: int, token: str) -> bool:
@@ -179,6 +191,11 @@ def post_inline_comments(
     issues: list[dict], commit_sha: str,
 ) -> bool:
     if not issues or not commit_sha:
+        return False
+
+    # Check if bot already posted inline comments (prevent duplicates)
+    if has_bot_reviews(owner, repo, pr_number, token):
+        print("Bot already posted inline comments, skipping to prevent duplicates")
         return False
 
     # Delete existing review if updating
