@@ -195,16 +195,26 @@ def detect_provider() -> tuple[str, str, str]:
     """Detect LLM provider from available API keys."""
     openai_key = get_env("OPENAI_API_KEY")
     anthropic_key = get_env("ANTHROPIC_API_KEY")
+    model_env = get_env("MODEL")
 
     if anthropic_key and openai_key:
-        print("WARNING: Both OPENAI_API_KEY and ANTHROPIC_API_KEY set. Using Anthropic.", file=sys.stderr)
-
-    if anthropic_key:
-        model = get_env("MODEL") or "claude-haiku-4-5-20251001"
+        # Match provider to model name when both keys are set
+        if model_env and model_env.startswith(_ANTHROPIC_PREFIXES):
+            model = model_env
+            print(f"WARNING: Both keys set. Model '{model}' matches Anthropic.", file=sys.stderr)
+            _validate_model("anthropic", model, anthropic_key)
+            return "anthropic", anthropic_key, model
+        else:
+            model = model_env or "gpt-4.1-mini"
+            print(f"WARNING: Both keys set. Model '{model}' uses OpenAI.", file=sys.stderr)
+            _validate_model("openai", model, openai_key)
+            return "openai", openai_key, model
+    elif anthropic_key:
+        model = model_env or "claude-haiku-4-5-20251001"
         _validate_model("anthropic", model, anthropic_key)
         return "anthropic", anthropic_key, model
     elif openai_key:
-        model = get_env("MODEL") or "gpt-4.1-mini"
+        model = model_env or "gpt-4.1-mini"
         _validate_model("openai", model, openai_key)
         return "openai", openai_key, model
     else:
