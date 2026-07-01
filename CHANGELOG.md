@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.10
+
+- Add "Free" to marketplace description for search discoverability
+- Add zero-cost callout and OpenCode setup guide to README
+
 ## v0.0.9
 
 - Rename to "Synaptic PR Review" for marketplace consistency

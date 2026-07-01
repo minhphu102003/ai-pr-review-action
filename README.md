@@ -1,14 +1,18 @@
 # Synaptic PR Review
 
-AI-powered PR review with anti-hallucination rules, severity callouts, and Mermaid diagrams.
+Free AI-powered PR review using [OpenCode](https://opencode.ai) free model. Anti-hallucination rules, severity callouts, and Mermaid diagrams.
+
+> **Zero cost** — uses `opencode/mimo-v2.5-free` by default. No API charges, no credit card. Just create a free OpenCode account and get your key.
 
 ## Quick Start
 
-**1.** Create a secret at **Settings → Secrets and variables → Actions → New repository secret** with your API key.
+**1.** Get a free API key at [opencode.ai](https://opencode.ai) — sign up, no credit card required.
 
-**2.** Add to your workflow:
+**2.** Add the key as a secret: **Settings → Secrets and variables → Actions → New repository secret** → name it `OPENCODE_API_KEY`.
 
-### OpenCode (free tier available)
+**3.** Add to your workflow:
+
+### OpenCode (free)
 
 ```yaml
 name: AI PR Review
@@ -23,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: minhphu102003/ai-pr-review-action@v0.0.9
+      - uses: minhphu102003/ai-pr-review-action@v0.0.10
         with:
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
 ```
@@ -33,7 +37,7 @@ jobs:
 ### Direct OpenAI
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.9
+      - uses: minhphu102003/ai-pr-review-action@v0.0.10
         with:
           engine: direct
           model: gpt-4.1-mini
@@ -43,7 +47,7 @@ jobs:
 ### Direct Anthropic
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.9
+      - uses: minhphu102003/ai-pr-review-action@v0.0.10
         with:
           engine: direct
           model: claude-haiku-4-5-20251001

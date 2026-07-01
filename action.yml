@@ -1,5 +1,5 @@
 name: 'Synaptic PR Review'
-description: 'AI-powered PR review with anti-hallucination rules, severity callouts, and Mermaid diagrams.'
+description: 'Free AI PR review using OpenCode free model. Anti-hallucination rules, severity callouts, Mermaid diagrams.'
 author: 'minhphu102003'
 
 branding:
