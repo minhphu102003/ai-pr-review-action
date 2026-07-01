@@ -1,0 +1,41 @@
+name: "Bad Case #1: Invalid API Key"
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  test-opencode:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          opencode_api_key: ${{ secrets.INVALID_KEY }}
+
+  test-openai:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: gpt-4.1-mini
+          openai_api_key: ${{ secrets.INVALID_KEY }}
+
+  test-anthropic:
+    if: "!github.event.pull_request.draft"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          engine: direct
+          model: mimo-v2.5-pro
+          anthropic_api_key: ${{ secrets.INVALID_KEY }}
+          anthropic_base_url: https://token-plan-sgp.xiaomimimo.com/anthropic
