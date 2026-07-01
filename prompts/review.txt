@@ -33,11 +33,11 @@
 <user_replies>
   - A <user_replies> block may contain the user's replies to your previous review comments
   - Each entry includes the original comment_id and the user's reply text
-  - You MUST generate a reply for each user reply, formatted as JSON (see <reply_output>)
+  - YOU decide whether to reply — do NOT reply to every comment:
+    - If user says "fixed", "done", "resolved" → skip, no reply needed
+    - If user is debating or asking questions → generate a reply
   - Be concise and professional: acknowledge valid points, explain politely if user is wrong
-  - If user says "fixed", acknowledge: "Acknowledged, thanks for the fix!"
-  - If user disagrees with valid reasoning, acknowledge their point
-  - If no user replies exist, this section will be absent — skip reply generation
+  - If no genuine debates to address, this section will be absent — skip reply generation
 </user_replies>
 
 <confidence_rules>
@@ -259,7 +259,7 @@
 </json_output>
 
 <reply_output>
-  After the REVIEW_ISSUES_JSON block, if there are user replies to address, append a reply JSON block.
+  After the REVIEW_ISSUES_JSON block, if there are genuine debates to address, append a reply JSON block.
   Wrap it in an HTML comment: <!-- REVIEW_REPLIES_JSON ... -->
 
   Format:
@@ -267,16 +267,19 @@
   [
     {
       "comment_id": 123456,
-      "body": "Your reply text here. Be respectful, acknowledge valid points."
+      "body": "Your reply text here."
     }
   ]
   -->
 
   Rules:
   - comment_id is the bot's original comment ID (provided in the <user_replies> context)
+  - ONLY reply to genuine debates — do NOT reply if user already fixed/resolved the issue
   - Be concise, professional, and constructive
-  - If user says "fixed", acknowledge briefly
-  - If user disagrees with valid reasoning, acknowledge their point
+  - If user has valid reasoning, acknowledge: "Good point, I agree this is acceptable."
+  - If user asks for clarification, explain the concern clearly
+  - If user is wrong, explain politely with evidence
+  - If no genuine debates to address, omit this block entirely
   - If user is wrong, explain politely with evidence
   - If no user replies to address, omit this block entirely
   - This JSON block is for machine parsing only
