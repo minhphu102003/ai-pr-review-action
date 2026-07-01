@@ -526,6 +526,29 @@ def extract_issues_json(review_text: str) -> tuple[str, list[dict] | None]:
         return review_text, None
 
 
+def strip_key_issues(review_text: str) -> str:
+    """Remove Key Issues and Code Improvements sections from summary comment.
+
+    Keeps: PR table, What This PR Does, Flow Overview, Summary.
+    The detailed issues are now inline comments.
+    """
+    # Remove ### Key Issues section (up to next ### or end)
+    text = re.sub(
+        r"### Key Issues.*?(?=### |\Z)",
+        "",
+        review_text,
+        flags=re.DOTALL,
+    )
+    # Remove ### Code Improvements section (including <details> blocks)
+    text = re.sub(
+        r"### Code Improvements.*?(?=### |\Z)",
+        "",
+        text,
+        flags=re.DOTALL,
+    )
+    return text.strip()
+
+
 def get_latest_commit(owner: str, repo: str, pr_number: int, token: str) -> str | None:
     """Get the latest commit SHA on the PR head."""
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
@@ -606,9 +629,10 @@ def post_inline_comments(
         title = issue.get("title", "Issue")
         body = issue.get("body", "")
 
-        # Build comment body with severity indicator
-        severity_icon = {"CAUTION": "⚠️", "WARNING": "⚠️", "NOTE": "\U0001f4dd"}.get(severity, "\U0001f4dd")
-        comment_body = f"{severity_icon} **{title}**\n\n{body}"
+        # Build comment body with severity level
+        severity_label = {"CAUTION": "Critical", "WARNING": "Warning", "NOTE": "Suggestion"}.get(severity, "Note")
+        severity_icon = {"CAUTION": "🔴", "WARNING": "🟡", "NOTE": "🔵"}.get(severity, "🔵")
+        comment_body = f"{severity_icon} **[{severity_label}] {title}**\n\n{body}"
 
         comments.append({
             "path": file_path,
@@ -695,8 +719,11 @@ def main():
     review = sanitize_review(review)
     clean_text, issues = extract_issues_json(review)
 
+    # Strip Key Issues from summary if inline comments will be posted
+    summary_text = strip_key_issues(clean_text) if issues else clean_text
+
     # Post summary comment (non-resolvable)
-    post_comment(owner, repo, pr_number, token, clean_text, update_existing=update_existing)
+    post_comment(owner, repo, pr_number, token, summary_text, update_existing=update_existing)
 
     # Post inline comments (resolvable)
     if issues:

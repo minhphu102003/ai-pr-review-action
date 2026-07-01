@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.17
+
+- Add severity level (Critical/Warning/Suggestion) to inline comments
+- Strip Key Issues and Code Improvements from summary comment (now inline)
+- Summary comment only shows overview: PR table, Flow Overview, Summary
+
 ## v0.0.16
 
 - Add inline resolvable review comments via PR Reviews API
