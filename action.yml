@@ -189,6 +189,15 @@ runs:
         prompt: ${{ steps.resolve-context.outputs.CONTEXT }}${{ steps.resolve-prompt.outputs.PROMPT }}
         share: ${{ inputs.share }}
 
+    # Post inline comments for OpenCode engine
+    - name: Post inline review comments
+      if: inputs.engine == 'opencode'
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: python3 "$ACTION_PATH/scripts/post_inline.py"
+
     # Engine: Direct LLM API (OpenAI or Anthropic)
     - name: Review with direct LLM API
       if: inputs.engine == 'direct'
