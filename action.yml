@@ -51,10 +51,6 @@ inputs:
     description: 'Update existing review comment instead of creating a new one'
     required: false
     default: 'true'
-  share:
-    description: 'Share OpenCode session link in PR comment (opencode engine only). Defaults to true for public repos.'
-    required: false
-    default: ''
 
 runs:
   using: 'composite'
@@ -116,7 +112,6 @@ runs:
         model: ${{ inputs.model || 'opencode/mimo-v2.5-free' }}
         use_github_token: true
         prompt: ${{ steps.resolve-prompt.outputs.PROMPT }}
-        share: ${{ inputs.share }}
 
     # Engine: Direct LLM API (OpenAI or Anthropic)
     - name: Review with direct LLM API

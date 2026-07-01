@@ -105,7 +105,6 @@ The action automatically masks API key values in workflow logs. Keys are passed 
 | `prompt_file` | No | *(built-in)* | Path to custom prompt file in your repo |
 | `exclude` | No | - | Comma-separated glob patterns to exclude (e.g. `docs/**,*.md`). *Direct engine only.* |
 | `update_comment` | No | `true` | Update existing review comment instead of creating a new one. *Direct engine only.* |
-| `share` | No | *(auto)* | Share OpenCode session link in PR comment. *OpenCode engine only.* |
 
 ### Default models per engine
 

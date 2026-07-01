@@ -3,15 +3,19 @@
 ## v0.0.8
 
 - Fix OpenCode action reference: `@v1` tag does not exist, pin to `@v1.17.12`
-- Add `share` input to toggle OpenCode session link in PR comment
-- Mask API keys in GitHub Actions logs via `::add-mask::`
-- Add Security section to README: require GitHub secrets, never hardcode keys
-- Add OpenCode auto-commit warning to README
+- Remove `share` input (session link feature unreliable)
+- Mask API keys (including `GITHUB_TOKEN`) in GitHub Actions logs via `::add-mask::`
+- Move Security section after Quick Start in README for visibility
+- Add step-by-step secret setup guide to README
+- Add "do not hardcode" warnings to all API key inputs in README
+- Add Required Permissions table to README and SECURITY.md
+- Strengthen auto-commit warning with explicit `contents: write` mention
+- Fix SECURITY.md inaccurate permissions claim
+- Add auto-commit risk and third-party dependency disclosure to SECURITY.md
 - Update action.yml input descriptions: warn against hardcoding API keys
 - Fix README: `openai_base_url` and `anthropic_base_url` defaults (empty, not full URL)
 - Fix README: mark `exclude` and `update_comment` as direct-engine-only inputs
 - Fix README: GPT-4.1 Mini context size (1M, not 128k)
-- Add note that `opencode_api_key` is passed as env var to OpenCode CLI
 
 ## v0.0.7
 
