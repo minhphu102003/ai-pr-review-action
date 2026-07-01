@@ -109,7 +109,7 @@ runs:
           echo "${DELIMITER}"
         } >> "$GITHUB_OUTPUT"
 
-    # Fetch context files for OpenCode engine
+    # Fetch context files for OpenCode engine (with diff size check)
     - id: resolve-context
       if: inputs.engine == 'opencode'
       shell: bash
@@ -118,7 +118,21 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github_token }}
         REPO: ${{ github.repository }}
         RUN_ID: ${{ github.run_id }}
+        EVENT_PATH: ${{ github.event_path }}
       run: |
+        # Check diff size before fetching context
+        PR_NUMBER=$(jq -r '.pull_request.number // .issue.number' "$EVENT_PATH")
+        DIFF_SIZE=$(curl -sfL -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3.diff" \
+          "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER" 2>/dev/null | wc -c)
+        echo "Diff size: $DIFF_SIZE chars"
+
+        # Only fetch context if diff < 70K chars
+        if [ "$DIFF_SIZE" -ge 70000 ]; then
+          echo "Diff too large ($DIFF_SIZE chars), skipping context files."
+          exit 0
+        fi
+
         CONTEXT=""
         if [ -n "$INPUT_CONTEXT_FILES" ]; then
           IFS=',' read -ra FILES <<< "$INPUT_CONTEXT_FILES"
@@ -135,7 +149,10 @@ runs:
             -H "Accept: application/vnd.github.v3.raw" \
             "https://api.github.com/repos/$REPO/contents/$f" 2>/dev/null || true)
           if [ -z "$CONTENT" ]; then
-            echo "::warning::Context file not found: $f"
+            # Only warn for user-specified paths
+            if [ -n "$INPUT_CONTEXT_FILES" ]; then
+              echo "::warning::Context file not found: $f"
+            fi
             continue
           fi
           REMAINING=$((MAX - TOTAL))
@@ -148,6 +165,9 @@ runs:
         "
           TOTAL=$((TOTAL + ${#CONTENT}))
         done
+        if [ -n "$CONTEXT" ]; then
+          echo "Context files: $TOTAL chars"
+        fi
         DELIMITER="ghadelim_${RUN_ID}"
         if [ -n "$CONTEXT" ]; then
           {
