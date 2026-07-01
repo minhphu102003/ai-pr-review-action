@@ -17,6 +17,10 @@ import urllib.request
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "120"))
 REVIEW_SIGNATURE = "*AI Review by ai-pr-review-action*"
 
+# Known model prefixes for Anthropic (no public models API).
+# OpenAI-compatible APIs are validated via GET /v1/models instead.
+_ANTHROPIC_PREFIXES = ("claude-",)
+
 
 def sanitize_review(text: str) -> str:
     """Sanitize LLM output before posting as GitHub comment."""
@@ -36,7 +40,77 @@ def get_env(name: str, required: bool = False) -> str:
     return val
 
 
-def safe_request(url: str, data: bytes | None = None, headers: dict | None = None, method: str | None = None, max_retries: int = 3) -> dict:
+def _validate_model(provider: str, model: str, api_key: str) -> None:
+    """Validate that the model exists. Exits on failure for OpenAI, warns for Anthropic."""
+    if provider == "openai":
+        _validate_openai_model(model, api_key)
+    elif provider == "anthropic":
+        _validate_anthropic_model(model)
+
+
+def _validate_openai_model(model: str, api_key: str) -> None:
+    """Query GET /v1/models to verify the model exists. Works for OpenAI and compatible APIs."""
+    url = _build_api_url("OPENAI_BASE_URL", "https://api.openai.com", "models")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json",
+    }
+    try:
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        available = {m["id"] for m in data.get("data", [])}
+        if model not in available:
+            # Find closest match for suggestion
+            suggestion = _closest_model(model, available)
+            msg = f"Error: Model '{model}' not found."
+            if suggestion:
+                msg += f" Did you mean '{suggestion}'?"
+            print(msg, file=sys.stderr)
+            print(f"Available models: {', '.join(sorted(available)[:20])}{'...' if len(available) > 20 else ''}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Model '{model}' verified.", file=sys.stderr)
+    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, TimeoutError) as e:
+        # If models endpoint is unavailable, warn but don't block
+        print(f"WARNING: Could not verify model '{model}' ({type(e).__name__}). Proceeding anyway.", file=sys.stderr)
+
+
+def _validate_anthropic_model(model: str) -> None:
+    """Prefix-based check for Anthropic models (no public models API)."""
+    if not model.startswith(_ANTHROPIC_PREFIXES):
+        print(
+            f"WARNING: Model '{model}' may not be a valid Anthropic model. "
+            f"Expected prefix: {', '.join(_ANTHROPIC_PREFIXES)}",
+            file=sys.stderr,
+        )
+
+
+def _closest_model(target: str, candidates: set[str]) -> str | None:
+    """Find the closest model name using edit distance. Returns None if no close match."""
+    def _edit_distance(a: str, b: str) -> int:
+        m, n = len(a), len(b)
+        dp = list(range(n + 1))
+        for i in range(1, m + 1):
+            prev = dp[0]
+            dp[0] = i
+            for j in range(1, n + 1):
+                temp = dp[j]
+                if a[i - 1] == b[j - 1]:
+                    dp[j] = prev
+                else:
+                    dp[j] = 1 + min(prev, dp[j], dp[j - 1])
+                prev = temp
+        return dp[n]
+
+    best, best_dist = None, len(target)  # threshold: at most len(target) edits
+    for c in candidates:
+        d = _edit_distance(target, c)
+        if d < best_dist:
+            best, best_dist = c, d
+    return best
+
+
+def safe_request(url: str, data: bytes | None = None, headers: dict | None = None, method: str | None = None, max_retries: int = 3, context: str = "api") -> dict:
     """HTTP request with error handling, timeout, and retry for transient errors."""
     if method is None:
         method = "POST" if data else "GET"
@@ -69,12 +143,20 @@ def safe_request(url: str, data: bytes | None = None, headers: dict | None = Non
 
             print(f"HTTP {e.code} from {url}", file=sys.stderr)
             print(f"Response: {body}", file=sys.stderr)
-            if e.code == 401:
+            if e.code == 400:
+                if context == "llm":
+                    print("Hint: Bad request. Check that your model name is correct for the chosen provider.", file=sys.stderr)
+                else:
+                    print("Hint: Bad request. Check the request parameters.", file=sys.stderr)
+            elif e.code == 401:
                 print("Hint: Check your API key is correct and not expired.", file=sys.stderr)
             elif e.code == 403:
                 print("Hint: Access denied. Check API key permissions.", file=sys.stderr)
             elif e.code == 404:
-                print("Hint: Resource not found. The PR may have been closed or deleted.", file=sys.stderr)
+                if context == "llm":
+                    print("Hint: Model or endpoint not found. Verify the model name and base URL.", file=sys.stderr)
+                else:
+                    print("Hint: Resource not found. The PR may have been closed or deleted.", file=sys.stderr)
             elif e.code == 429:
                 print("Hint: Rate limited. Try again later or use a different provider.", file=sys.stderr)
             elif e.code >= 500:
@@ -113,9 +195,11 @@ def detect_provider() -> tuple[str, str, str]:
 
     if anthropic_key:
         model = get_env("MODEL") or "claude-haiku-4-5-20251001"
+        _validate_model("anthropic", model, anthropic_key)
         return "anthropic", anthropic_key, model
     elif openai_key:
         model = get_env("MODEL") or "gpt-4.1-mini"
+        _validate_model("openai", model, openai_key)
         return "openai", openai_key, model
     else:
         print("Error: Set OPENAI_API_KEY or ANTHROPIC_API_KEY", file=sys.stderr)
@@ -305,7 +389,7 @@ def call_openai(api_key: str, model: str, prompt: str, diff: str) -> str:
         "temperature": 0.3,
     }).encode("utf-8")
 
-    result = safe_request(url, data=body, headers=headers)
+    result = safe_request(url, data=body, headers=headers, context="llm")
     if "error" in result:
         print(f"OpenAI API error: {result['error']}", file=sys.stderr)
         sys.exit(1)
@@ -334,7 +418,7 @@ def call_anthropic(api_key: str, model: str, prompt: str, diff: str) -> str:
         ],
     }).encode("utf-8")
 
-    result = safe_request(url, data=body, headers=headers)
+    result = safe_request(url, data=body, headers=headers, context="llm")
     if "error" in result:
         print(f"Anthropic API error: {result['error']}", file=sys.stderr)
         sys.exit(1)
@@ -395,6 +479,7 @@ def post_comment(owner: str, repo: str, pr_number: int, token: str, body: str, u
 
 
 def main():
+    # detect_provider() validates API keys and model name
     provider, api_key, model = detect_provider()
     owner, repo, pr_number = get_github_info()
     token = get_env("GITHUB_TOKEN", required=True)
