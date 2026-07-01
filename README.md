@@ -35,23 +35,23 @@ jobs:
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
 ```
 
-### Direct Anthropic API
+### Direct Anthropic API (Haiku — fast, cheap, 200k context)
 
 ```yaml
       - uses: minhphu102003/ai-pr-review-action@v1
         with:
           engine: direct
-          model: claude-sonnet-4-20250514
+          model: claude-haiku-4-5-20251001
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### Direct OpenAI API
+### Direct OpenAI API (GPT-4.1 Mini — fast, cheap, 128k context)
 
 ```yaml
       - uses: minhphu102003/ai-pr-review-action@v1
         with:
           engine: direct
-          model: gpt-4o
+          model: gpt-4.1-mini
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
@@ -60,7 +60,7 @@ jobs:
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `engine` | No | `opencode` | LLM engine: `opencode` or `direct` |
-| `model` | No | *(auto)* | Model name (e.g. `gpt-4o`, `claude-sonnet-4-20250514`) |
+| `model` | No | *(auto)* | Model name (e.g. `gpt-4.1-mini`, `claude-haiku-4-5-20251001`) |
 | `opencode_api_key` | If engine=opencode | - | OpenCode API key |
 | `openai_api_key` | If engine=direct | - | OpenAI API key |
 | `anthropic_api_key` | If engine=direct | - | Anthropic API key |
@@ -73,8 +73,8 @@ jobs:
 | Engine | Default model |
 |--------|--------------|
 | `opencode` | `opencode/mimo-v2.5-free` |
-| `direct` (OpenAI) | `gpt-4o` |
-| `direct` (Anthropic) | `claude-sonnet-4-20250514` |
+| `direct` (OpenAI) | `gpt-4.1-mini` |
+| `direct` (Anthropic) | `claude-haiku-4-5-20251001` |
 
 ## Custom Prompt
 

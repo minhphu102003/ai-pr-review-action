@@ -27,10 +27,10 @@ def detect_provider() -> tuple[str, str]:
     anthropic_key = get_env("ANTHROPIC_API_KEY")
 
     if anthropic_key:
-        model = get_env("MODEL") or "claude-sonnet-4-20250514"
+        model = get_env("MODEL") or "claude-haiku-4-5-20251001"
         return "anthropic", anthropic_key, model
     elif openai_key:
-        model = get_env("MODEL") or "gpt-4o"
+        model = get_env("MODEL") or "gpt-4.1-mini"
         return "openai", openai_key, model
     else:
         print("Error: Set OPENAI_API_KEY or ANTHROPIC_API_KEY", file=sys.stderr)

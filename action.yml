@@ -12,7 +12,7 @@ inputs:
     required: false
     default: 'opencode'
   model:
-    description: 'Model name (e.g. opencode/mimo-v2.5-free, gpt-4o, claude-sonnet-4-20250514)'
+    description: 'Model name (e.g. opencode/mimo-v2.5-free, gpt-4.1-mini, claude-haiku-4-5-20251001)'
     required: false
     default: ''
   opencode_api_key:
