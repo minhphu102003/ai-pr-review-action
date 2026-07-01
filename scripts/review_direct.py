@@ -345,37 +345,6 @@ def _fetch_file_content(owner: str, repo: str, path: str, token: str, warn: bool
         return None
 
 
-def _list_dir_files(owner: str, repo: str, path: str, token: str, limit: int = 3, warn: bool = False) -> list[str]:
-    """List files in a directory, sorted by most recently modified. Returns up to `limit` file paths."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "ai-pr-review-action",
-    }
-    try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-            items = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.HTTPError, urllib.error.URLError) as e:
-        if warn:
-            print(f"WARNING: Failed to list directory {path}: {e}", file=sys.stderr)
-        return []
-
-    if not isinstance(items, list):
-        return []
-
-    # Filter to files only (not subdirs), prefer .md files
-    files = [i for i in items if i.get("type") == "file"]
-    md_files = [i for i in files if i["name"].endswith((".md", ".txt", ".prompt"))]
-    candidates = md_files if md_files else files
-
-    # Sort by name descending (assumes date-prefixed names like 2026-01-spec.md)
-    # If no date pattern, just take first N
-    candidates.sort(key=lambda x: x["name"], reverse=True)
-    return [c["path"] for c in candidates[:limit]]
-
-
 def fetch_context_files(
     owner: str, repo: str, token: str, context_files_input: str | None
 ) -> str:
@@ -385,34 +354,23 @@ def fetch_context_files(
     1. User-specified files (context_files input, comma-separated)
     2. Auto-detect: CLAUDE.md, architecture docs, README
 
-    If a path is a directory, fetches 1-3 most recent files from it.
-    Logs warning for paths that don't exist.
+    Logs warning for user-specified paths that don't exist.
 
     Returns concatenated file content, truncated to _CONTEXT_MAX_CHARS.
     Returns empty string on failure (non-blocking).
     """
     # Determine which files to fetch
     if context_files_input:
-        raw_paths = [p.strip() for p in context_files_input.split(",") if p.strip()]
+        paths_to_fetch = [p.strip() for p in context_files_input.split(",") if p.strip()]
     else:
-        raw_paths = list(_AUTO_CONTEXT_PATHS)
+        paths_to_fetch = list(_AUTO_CONTEXT_PATHS)
 
-    # Resolve directories to individual files
     is_user_specified = bool(context_files_input)
     paths = []
-    for p in raw_paths:
-        # Try as file first
+    for p in paths_to_fetch:
         content = _fetch_file_content(owner, repo, p, token, warn=is_user_specified)
         if content is not None:
             paths.append((p, content))
-        else:
-            # Try as directory
-            dir_files = _list_dir_files(owner, repo, p, token, limit=3, warn=is_user_specified)
-            if dir_files:
-                for df in dir_files:
-                    fc = _fetch_file_content(owner, repo, df, token, warn=is_user_specified)
-                    if fc is not None:
-                        paths.append((df, fc))
 
     parts = []
     total_chars = 0
