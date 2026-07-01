@@ -231,6 +231,7 @@ def post_inline_comments(
 def main():
     owner, repo, pr_number = get_github_info()
     token = get_env("GITHUB_TOKEN", required=True)
+    skip_inline = get_env("SKIP_INLINE_COMMENTS").lower() in ("1", "true", "yes")
 
     # Find the latest comment with JSON block (either REVIEW_ISSUES_JSON or REVIEW_REPLIES_JSON)
     comment = find_latest_comment(owner, repo, pr_number, token)
@@ -264,6 +265,11 @@ def main():
                         print(f"WARNING: Failed to reply to comment {cid}: {e}", file=sys.stderr)
         except Exception as e:
             print(f"WARNING: Could not process replies: {e}", file=sys.stderr)
+
+    # Skip inline comments if OpenCode engine already posts them
+    if skip_inline:
+        print("Skipping inline comments (SKIP_INLINE_COMMENTS=true)")
+        return
 
     # Extract and post inline comments (if REVIEW_ISSUES_JSON exists)
     clean_text, issues = extract_issues_json(clean_text)
