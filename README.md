@@ -1,6 +1,6 @@
-# AI PR Review Action
+# Synaptic PR Review
 
-AI-powered PR review with anti-hallucination rules, severity callouts, and Mermaid diagrams. Supports OpenCode (free tier) and direct LLM APIs (OpenAI, Anthropic).
+AI-powered PR review with anti-hallucination rules, severity callouts, and Mermaid diagrams.
 
 ## Quick Start
 
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: minhphu102003/ai-pr-review-action@v0.0.8
+      - uses: minhphu102003/ai-pr-review-action@v0.0.9
         with:
           opencode_api_key: ${{ secrets.OPENCODE_API_KEY }}
 ```
@@ -33,7 +33,7 @@ jobs:
 ### Direct OpenAI
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.8
+      - uses: minhphu102003/ai-pr-review-action@v0.0.9
         with:
           engine: direct
           model: gpt-4.1-mini
@@ -43,7 +43,7 @@ jobs:
 ### Direct Anthropic
 
 ```yaml
-      - uses: minhphu102003/ai-pr-review-action@v0.0.8
+      - uses: minhphu102003/ai-pr-review-action@v0.0.9
         with:
           engine: direct
           model: claude-haiku-4-5-20251001

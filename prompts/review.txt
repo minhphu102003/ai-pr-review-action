@@ -81,7 +81,7 @@
   - Use flowchart keyword, never graph (when using flowchart type)
   - Quote node labels containing special characters
   - Keep it readable: max 15 nodes or 10 messages
-  - Place the diagram in a fenced mermaid block inside a collapsible section
+  - Place the diagram in a fenced mermaid block (no collapsible wrapper)
   - For bug fixes, use Note blocks to highlight the bug and fix points
 </mermaid_diagram>
 
@@ -99,6 +99,16 @@
   | **Effort** | [1-5] |
   | **Tests** | Yes / No |
   | **Security** | No / Yes -- describe |
+
+  ### Flow Overview
+
+  ```mermaid
+  sequenceDiagram
+      participant C as Client
+      participant A as API
+      C->>A: request
+      A-->>C: response
+  ```
 
   ### Key Issues
 
@@ -145,21 +155,6 @@
   > **File:** `path/to/file.py` | **Line:** 42-45
   >
   > Description.
-
-  ### Flow Overview
-
-  <details>
-  <summary>Mermaid diagram</summary>
-
-  ```mermaid
-  sequenceDiagram
-      participant C as Client
-      participant A as API
-      C->>A: request
-      A-->>C: response
-  ```
-
-  </details>
 
   ### Code Improvements
 

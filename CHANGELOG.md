@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.9
+
+- Rename to "Synaptic PR Review" for marketplace consistency
+- Reorder output format: move Flow Overview diagram before Key Issues
+- Remove collapsible wrapper on Mermaid diagram (expanded by default)
+- Update README title and description to match marketplace listing
+
 ## v0.0.8
 
 - Fix OpenCode action reference: `@v1` tag does not exist, pin to `@v1.17.12`
