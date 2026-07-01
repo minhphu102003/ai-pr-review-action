@@ -1,0 +1,19 @@
+name: AI PR Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./  # Use local action
+        with:
+          engine: direct
+          model: opencode/mimo-v2.5-free
+          openai_api_key: ${{ secrets.OPENCODE_API_KEY }}
+          openai_base_url: https://opencode.ai/api/v1
