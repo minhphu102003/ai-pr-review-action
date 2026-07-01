@@ -11,6 +11,12 @@ import sys
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from review_context import (
+    fetch_unresolved_threads, filter_threads, find_user_replies,
+    post_reply, extract_replies_json,
+)
+
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "120"))
 REVIEW_SIGNATURE = "*AI Review by ai-pr-review-action*"
 
@@ -221,6 +227,26 @@ def main():
         return
 
     print(f"Found {len(issues)} issues")
+
+    # Extract and post replies to user comments
+    clean_text, reply_list = extract_replies_json(clean_text)
+    if reply_list:
+        try:
+            threads = fetch_unresolved_threads(owner, repo, pr_number, token)
+            threads = filter_threads(threads)
+            replies_needed = find_user_replies(threads)
+            valid_ids = {r["comment_id"] for r in replies_needed}
+            for reply in reply_list:
+                cid = reply.get("comment_id")
+                reply_body = reply.get("body", "")
+                if cid in valid_ids and reply_body:
+                    try:
+                        post_reply(owner, repo, pr_number, cid, reply_body, token)
+                        print(f"Replied to comment {cid}")
+                    except Exception as e:
+                        print(f"WARNING: Failed to reply to comment {cid}: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"WARNING: Could not process replies: {e}", file=sys.stderr)
 
     # Update summary comment to strip Key Issues
     summary_text = strip_key_issues(clean_text)

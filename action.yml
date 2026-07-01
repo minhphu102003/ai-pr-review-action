@@ -177,6 +177,34 @@ runs:
           } >> "$GITHUB_OUTPUT"
         fi
 
+    # Fetch unresolved review threads for context and auto-reply (OpenCode engine)
+    - id: resolve-review-context
+      if: inputs.engine == 'opencode'
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+        EVENT_PATH: ${{ github.event_path }}
+      run: |
+        PR_NUMBER=$(jq -r '.pull_request.number // .issue.number' "$EVENT_PATH")
+        REVIEW_CTX=$(python3 "$ACTION_PATH/scripts/review_context.py" \
+          --owner "${REPO%%/*}" --repo "${REPO##*/}" \
+          --pr "$PR_NUMBER" --token "$GITHUB_TOKEN" --mode context 2>/dev/null || true)
+        REPLY_CTX=$(python3 "$ACTION_PATH/scripts/review_context.py" \
+          --owner "${REPO%%/*}" --repo "${REPO##*/}" \
+          --pr "$PR_NUMBER" --token "$GITHUB_TOKEN" --mode replies 2>/dev/null || true)
+        DELIMITER="ghadelim_${RUN_ID}"
+        {
+          echo "REVIEW_CONTEXT<<${DELIMITER}"
+          echo "${REVIEW_CTX}${REPLY_CTX}"
+          echo "${DELIMITER}"
+        } >> "$GITHUB_OUTPUT"
+        if [ -n "$REVIEW_CTX" ]; then
+          echo "Review context fetched"
+        fi
+
     # Engine: OpenCode (default)
     - name: Review with OpenCode
       if: inputs.engine == 'opencode'
@@ -187,7 +215,7 @@ runs:
       with:
         model: ${{ inputs.model || 'opencode/mimo-v2.5-free' }}
         use_github_token: true
-        prompt: ${{ steps.resolve-context.outputs.CONTEXT }}${{ steps.resolve-prompt.outputs.PROMPT }}
+        prompt: ${{ steps.resolve-context.outputs.CONTEXT }}${{ steps.resolve-review-context.outputs.REVIEW_CONTEXT }}${{ steps.resolve-prompt.outputs.PROMPT }}
         share: ${{ inputs.share }}
 
     # Post inline comments for OpenCode engine

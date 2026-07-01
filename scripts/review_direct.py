@@ -15,6 +15,12 @@ import time
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from review_context import (
+    fetch_unresolved_threads, filter_threads, find_user_replies,
+    format_reply_context, format_review_context, post_reply, extract_replies_json,
+)
+
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "120"))
 REVIEW_SIGNATURE = "*AI Review by ai-pr-review-action*"
 
@@ -482,14 +488,21 @@ def _build_api_url(base_url_env: str, default_url: str, path: str) -> str:
     return f"{base_url}/v1/{path}"
 
 
-def _build_user_message(diff: str, context: str = "") -> str:
-    """Build the user message with optional context files."""
+def _build_user_message(diff: str, context: str = "", review_context: str = "", reply_context: str = "") -> str:
+    """Build the user message with optional context, review context, and reply context."""
+    parts = []
     if context:
-        return f"<context>\n{context}\n</context>\n\n<diff>\n```diff\n{diff}\n```\n</diff>"
-    return f"Here is the PR diff to review:\n\n```diff\n{diff}\n```"
+        parts.append(f"<context>\n{context}\n</context>")
+    if review_context:
+        parts.append(review_context)
+    if reply_context:
+        parts.append(reply_context)
+    parts.append(f"<diff>\n```diff\n{diff}\n```\n</diff>")
+    return "\n\n".join(parts)
 
 
-def call_openai(api_key: str, model: str, prompt: str, diff: str, context: str = "") -> str:
+def call_openai(api_key: str, model: str, prompt: str, diff: str, context: str = "",
+                review_context: str = "", reply_context: str = "") -> str:
     """Call OpenAI or OpenAI-compatible API."""
     url = _build_api_url("OPENAI_BASE_URL", "https://api.openai.com", "chat/completions")
 
@@ -501,7 +514,7 @@ def call_openai(api_key: str, model: str, prompt: str, diff: str, context: str =
         "model": model,
         "messages": [
             {"role": "system", "content": prompt},
-            {"role": "user", "content": _build_user_message(diff, context)},
+            {"role": "user", "content": _build_user_message(diff, context, review_context, reply_context)},
         ],
         "max_tokens": 4096,
         "temperature": 0.3,
@@ -517,7 +530,8 @@ def call_openai(api_key: str, model: str, prompt: str, diff: str, context: str =
     return result["choices"][0]["message"]["content"]
 
 
-def call_anthropic(api_key: str, model: str, prompt: str, diff: str, context: str = "") -> str:
+def call_anthropic(api_key: str, model: str, prompt: str, diff: str, context: str = "",
+                   review_context: str = "", reply_context: str = "") -> str:
     """Call Anthropic or Anthropic-compatible API."""
     url = _build_api_url("ANTHROPIC_BASE_URL", "https://api.anthropic.com", "messages")
 
@@ -532,7 +546,7 @@ def call_anthropic(api_key: str, model: str, prompt: str, diff: str, context: st
         "temperature": 0.3,
         "system": prompt,
         "messages": [
-            {"role": "user", "content": _build_user_message(diff, context)},
+            {"role": "user", "content": _build_user_message(diff, context, review_context, reply_context)},
         ],
     }).encode("utf-8")
 
@@ -813,21 +827,57 @@ def main():
         if context:
             diff_max = 70000  # Reserve budget for context
 
+    # Fetch unresolved review threads for context and auto-reply
+    review_context = ""
+    reply_context = ""
+    replies_needed = []
+    try:
+        threads = fetch_unresolved_threads(owner, repo, pr_number, token)
+        threads = filter_threads(threads)
+        if threads:
+            review_context = format_review_context(threads)
+            replies_needed = find_user_replies(threads)
+            if replies_needed:
+                reply_context = format_reply_context(replies_needed)
+                print(f"Found {len(replies_needed)} user reply(ies) to address")
+            print(f"Review context: {len(threads)} unresolved thread(s)")
+    except Exception as e:
+        print(f"WARNING: Could not fetch review context: {e}", file=sys.stderr)
+
+    # Adjust diff budget for additional context
+    total_context_len = len(context) + len(review_context) + len(reply_context)
+    if total_context_len > 0:
+        diff_max = max(diff_max - len(review_context) - len(reply_context), 50000)
+
     # Truncate diff
     diff = truncate_diff(diff, max_chars=diff_max)
 
     # Call LLM
     print(f"Calling {provider} API...")
     if provider == "openai":
-        review = call_openai(api_key, model, prompt, diff, context)
+        review = call_openai(api_key, model, prompt, diff, context, review_context, reply_context)
     else:
-        review = call_anthropic(api_key, model, prompt, diff, context)
+        review = call_anthropic(api_key, model, prompt, diff, context, review_context, reply_context)
 
     print(f"Review length: {len(review)} chars")
 
     # Sanitize and extract issues
     review = sanitize_review(review)
     clean_text, issues = extract_issues_json(review)
+
+    # Extract and post replies to user comments
+    clean_text, reply_list = extract_replies_json(clean_text)
+    if reply_list and replies_needed:
+        valid_ids = {r["comment_id"] for r in replies_needed}
+        for reply in reply_list:
+            cid = reply.get("comment_id")
+            body = reply.get("body", "")
+            if cid in valid_ids and body:
+                try:
+                    post_reply(owner, repo, pr_number, cid, body, token)
+                    print(f"Replied to comment {cid}")
+                except Exception as e:
+                    print(f"WARNING: Failed to reply to comment {cid}: {e}", file=sys.stderr)
 
     # Post summary comment (non-resolvable, full review)
     post_comment(owner, repo, pr_number, token, clean_text, update_existing=update_existing)
