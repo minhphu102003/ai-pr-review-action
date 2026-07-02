@@ -16,7 +16,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from review_context import HTTP_TIMEOUT, REVIEW_SIGNATURE, get_env, safe_request
+from review_context import HTTP_TIMEOUT, get_env, safe_request
 
 RULES_PATH = ".synaptic/rules.json"
 MAX_RULE_LENGTH = 500
@@ -397,10 +397,11 @@ def extract_remember_json(review_text: str) -> str | None:
 
 
 def find_latest_comment_with_remember(owner: str, repo: str, pr_number: int, token: str) -> str | None:
-    """Find the latest bot review comment containing REMEMBER_RULE_JSON.
+    """Find the latest bot comment containing REMEMBER_RULE_JSON.
 
-    Only matches comments authored by github-actions[bot] with the review signature,
-    to avoid picking up user comments or stale bot comments from previous runs.
+    Only matches comments authored by github-actions[bot] to avoid picking up user comments.
+    The REVIEW_SIGNATURE check is omitted because the extract prompt produces a minimal
+    output (just the JSON block) without the full review signature.
     """
     url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments?per_page=100&sort=created&direction=desc"
     headers = {
@@ -416,7 +417,7 @@ def find_latest_comment_with_remember(owner: str, repo: str, pr_number: int, tok
     for comment in comments:
         author = comment.get("user", {}).get("login", "")
         body = comment.get("body", "")
-        if author == "github-actions[bot]" and REVIEW_SIGNATURE in body and "REMEMBER_RULE_JSON" in body:
+        if author == "github-actions[bot]" and "REMEMBER_RULE_JSON" in body:
             return body
     return None
 

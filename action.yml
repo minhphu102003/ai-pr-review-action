@@ -93,6 +93,16 @@ runs:
         if [ "$IS_REMEMBER" = "true" ]; then
           PROMPT_PATH="$ACTION_PATH/prompts/extract_rule.txt"
           echo "Using extract prompt: $PROMPT_PATH"
+          # Create temp file with extract prompt + comment body so LLM can extract the rule
+          TEMP_PROMPT=$(mktemp)
+          cat "$PROMPT_PATH" > "$TEMP_PROMPT"
+          {
+            echo ""
+            echo "<user_message>"
+            echo "$COMMENT_BODY"
+            echo "</user_message>"
+          } >> "$TEMP_PROMPT"
+          PROMPT_PATH="$TEMP_PROMPT"
         else
           PROMPT_PATH=""
           if [ -n "$INPUT_PROMPT_FILE" ] && [ -f "$INPUT_PROMPT_FILE" ]; then
@@ -246,7 +256,7 @@ runs:
 
     # Engine: OpenCode (default)
     - name: Review with OpenCode
-      if: inputs.engine == 'opencode'
+      if: inputs.engine == 'opencode' && steps.resolve-prompt.outputs.IS_REMEMBER != 'true'
       uses: anomalyco/opencode/github@v1.17.12
       env:
         OPENCODE_API_KEY: ${{ inputs.opencode_api_key }}
@@ -266,8 +276,8 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github_token }}
       run: python3 "$ACTION_PATH/scripts/post_inline.py"
 
-    # Extract remember rule from LLM output (both engines)
-    - name: Process remember rule from review
+    # Extract and save remember rule directly from comment body
+    - name: Process remember rule
       if: >-
         github.event_name == 'issue_comment' &&
         contains(github.event.comment.body, '@synaptic-ai remember')
@@ -276,8 +286,11 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         REPO: ${{ github.repository }}
-        EVENT_PATH: ${{ github.event_path }}
-      run: python3 "$ACTION_PATH/scripts/rules.py" process-remember
+        COMMENT_BODY: ${{ github.event.comment.body }}
+        COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+        COMMENT_ID: ${{ github.event.comment.id }}
+        GITHUB_EVENT_PATH: ${{ github.event_path }}
+      run: python3 "$ACTION_PATH/scripts/rules.py" remember
 
     # Engine: Direct LLM API (OpenAI or Anthropic)
     - name: Review with direct LLM API
