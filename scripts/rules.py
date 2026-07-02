@@ -289,7 +289,7 @@ def save_rules(owner: str, repo: str, token: str, rules: list[dict], sha: str | 
         }
         body = json.dumps(payload).encode("utf-8")
         try:
-            result = safe_request(url, data=body, headers=headers)
+            result = safe_request(url, data=body, headers=headers, method="PUT")
             print(f"Rules committed: {result.get('content', {}).get('html_url', 'ok')}")
             return True
         except urllib.error.HTTPError as e:
