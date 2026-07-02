@@ -78,24 +78,39 @@ runs:
         INPUT_PROMPT_FILE: ${{ inputs.prompt_file }}
         ACTION_PATH: ${{ github.action_path }}
         RUN_ID: ${{ github.run_id }}
+        EVENT_NAME: ${{ github.event_name }}
+        COMMENT_BODY: ${{ github.event.comment.body }}
       run: |
-        PROMPT_PATH=""
-        if [ -n "$INPUT_PROMPT_FILE" ] && [ -f "$INPUT_PROMPT_FILE" ]; then
-          # Validate file extension
-          case "$INPUT_PROMPT_FILE" in
-            *.txt|*.md|*.prompt) ;;
-            *)
-              echo "::warning::Prompt file '$INPUT_PROMPT_FILE' has unusual extension. Expected .txt, .md, or .prompt."
-              ;;
-          esac
-          PROMPT_PATH="$INPUT_PROMPT_FILE"
-          echo "Using custom prompt: $PROMPT_PATH"
-        elif [ -f ".github/prompts/review.txt" ]; then
-          PROMPT_PATH=".github/prompts/review.txt"
-          echo "Using repo prompt: $PROMPT_PATH"
+        # Detect remember mode
+        IS_REMEMBER="false"
+        if [ "$EVENT_NAME" = "issue_comment" ] && echo "$COMMENT_BODY" | grep -qi "@synaptic-ai remember"; then
+          IS_REMEMBER="true"
+          echo "Remember command detected — using minimal extract prompt"
+        fi
+        echo "IS_REMEMBER=$IS_REMEMBER" >> "$GITHUB_OUTPUT"
+
+        # Select prompt
+        if [ "$IS_REMEMBER" = "true" ]; then
+          PROMPT_PATH="$ACTION_PATH/prompts/extract_rule.txt"
+          echo "Using extract prompt: $PROMPT_PATH"
         else
-          PROMPT_PATH="$ACTION_PATH/prompts/review.txt"
-          echo "Using built-in prompt: $PROMPT_PATH"
+          PROMPT_PATH=""
+          if [ -n "$INPUT_PROMPT_FILE" ] && [ -f "$INPUT_PROMPT_FILE" ]; then
+            case "$INPUT_PROMPT_FILE" in
+              *.txt|*.md|*.prompt) ;;
+              *)
+                echo "::warning::Prompt file '$INPUT_PROMPT_FILE' has unusual extension. Expected .txt, .md, or .prompt."
+                ;;
+            esac
+            PROMPT_PATH="$INPUT_PROMPT_FILE"
+            echo "Using custom prompt: $PROMPT_PATH"
+          elif [ -f ".github/prompts/review.txt" ]; then
+            PROMPT_PATH=".github/prompts/review.txt"
+            echo "Using repo prompt: $PROMPT_PATH"
+          else
+            PROMPT_PATH="$ACTION_PATH/prompts/review.txt"
+            echo "Using built-in prompt: $PROMPT_PATH"
+          fi
         fi
         # Validate prompt size (GitHub Actions env var limit ~48KB)
         PROMPT_SIZE=$(wc -c < "$PROMPT_PATH")
@@ -111,7 +126,7 @@ runs:
 
     # Fetch context files for OpenCode engine (with diff size check)
     - id: resolve-context
-      if: inputs.engine == 'opencode'
+      if: inputs.engine == 'opencode' && steps.resolve-prompt.outputs.IS_REMEMBER != 'true'
       shell: bash
       env:
         INPUT_CONTEXT_FILES: ${{ inputs.context_files }}
@@ -179,9 +194,31 @@ runs:
           } >> "$GITHUB_OUTPUT"
         fi
 
+    # Load repository memory rules
+    - id: resolve-rules
+      if: steps.resolve-prompt.outputs.IS_REMEMBER != 'true'
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+      run: |
+        RULES_CTX=$(python3 "$ACTION_PATH/scripts/rules.py" \
+          load --owner "${REPO%%/*}" --repo "${REPO##*/}" 2>/dev/null || true)
+        DELIMITER="ghadelim_${RUN_ID}"
+        if [ -n "$RULES_CTX" ]; then
+          echo "Repository rules loaded"
+          {
+            echo "RULES_CONTEXT<<${DELIMITER}"
+            echo "${RULES_CTX}"
+            echo "${DELIMITER}"
+          } >> "$GITHUB_OUTPUT"
+        fi
+
     # Fetch unresolved review threads for context and auto-reply (OpenCode engine)
     - id: resolve-review-context
-      if: inputs.engine == 'opencode'
+      if: inputs.engine == 'opencode' && steps.resolve-prompt.outputs.IS_REMEMBER != 'true'
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -217,17 +254,30 @@ runs:
       with:
         model: ${{ inputs.model || 'opencode/mimo-v2.5-free' }}
         use_github_token: true
-        prompt: ${{ steps.resolve-context.outputs.CONTEXT }}${{ steps.resolve-review-context.outputs.REVIEW_CONTEXT }}${{ steps.resolve-prompt.outputs.PROMPT }}
+        prompt: ${{ steps.resolve-rules.outputs.RULES_CONTEXT }}${{ steps.resolve-context.outputs.CONTEXT }}${{ steps.resolve-review-context.outputs.REVIEW_CONTEXT }}${{ steps.resolve-prompt.outputs.PROMPT }}
         share: ${{ inputs.share }}
 
     # Post inline comments for OpenCode engine
     - name: Post inline review comments
-      if: inputs.engine == 'opencode'
+      if: inputs.engine == 'opencode' && steps.resolve-prompt.outputs.IS_REMEMBER != 'true'
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
       run: python3 "$ACTION_PATH/scripts/post_inline.py"
+
+    # Extract remember rule from LLM output (both engines)
+    - name: Process remember rule from review
+      if: >-
+        github.event_name == 'issue_comment' &&
+        contains(github.event.comment.body, '@synaptic-ai remember')
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        EVENT_PATH: ${{ github.event_path }}
+      run: python3 "$ACTION_PATH/scripts/rules.py" process-remember
 
     # Engine: Direct LLM API (OpenAI or Anthropic)
     - name: Review with direct LLM API
@@ -244,5 +294,7 @@ runs:
         EXCLUDE: ${{ inputs.exclude }}
         CONTEXT_FILES: ${{ inputs.context_files }}
         UPDATE_COMMENT: ${{ inputs.update_comment }}
-        PROMPT: ${{ steps.resolve-prompt.outputs.PROMPT }}
+        PROMPT: ${{ steps.resolve-rules.outputs.RULES_CONTEXT }}${{ steps.resolve-prompt.outputs.PROMPT }}
+        COMMENT_BODY: ${{ github.event.comment.body }}
+        COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
       run: python3 "$ACTION_PATH/scripts/review_direct.py"

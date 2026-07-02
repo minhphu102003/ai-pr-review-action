@@ -23,6 +23,7 @@ from review_context import (
     get_latest_commit, mask_secrets, post_inline_comments, post_reply,
     safe_request, update_comment, find_existing_comment,
 )
+from rules import extract_remember_json, load_rules, validate_rule, generate_rule_id, save_rules
 
 # Known model prefixes for Anthropic (no public models API).
 # OpenAI-compatible APIs are validated via GET /v1/models instead.
@@ -472,6 +473,21 @@ def main():
     exclude = get_env("EXCLUDE")
     update_existing = get_env("UPDATE_COMMENT").lower() != "false"
     context_files_input = get_env("CONTEXT_FILES")
+    comment_body = get_env("COMMENT_BODY")
+
+    # For remember commands: append extraction instruction so LLM outputs REMEMBER_RULE_JSON
+    is_remember = "@synaptic-ai remember" in comment_body.lower()
+    if is_remember:
+        prompt += (
+            "\n\n<remember_instruction>\n"
+            "The user posted a @synaptic-ai remember command. "
+            "Extract the coding convention from their message and include this EXACT block at the END of your response:\n\n"
+            "<!-- REMEMBER_RULE_JSON\n"
+            "{\"rule\": \"<extracted rule as a clear, concise statement>\"}\n"
+            "-->\n\n"
+            "If no clear rule is found, do not include the block.\n"
+            "</remember_instruction>"
+        )
 
     print(f"Provider: {provider}, Model: {model}")
     print(f"PR: {owner}/{repo}#{pr_number}")
@@ -563,6 +579,29 @@ def main():
 
     # Post summary comment (non-resolvable, full review)
     post_comment(owner, repo, pr_number, token, clean_text, update_existing=update_existing)
+
+    # Extract and save remember rule from LLM output
+    if is_remember:
+        try:
+            from datetime import datetime, timezone
+            rule_text = extract_remember_json(review)
+            if rule_text:
+                rules, sha = load_rules(owner, repo, token)
+                valid, error = validate_rule(rule_text, rules)
+                if valid:
+                    new_rule = {
+                        "id": generate_rule_id(rules),
+                        "rule": rule_text,
+                        "createdBy": get_env("COMMENT_AUTHOR", "unknown"),
+                        "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    }
+                    rules.append(new_rule)
+                    if save_rules(owner, repo, token, rules, sha):
+                        print(f"Rule extracted and saved: {new_rule['id']} — {rule_text}")
+                else:
+                    print(f"Extracted rule validation failed: {error}", file=sys.stderr)
+        except Exception as e:
+            print(f"WARNING: Could not process remember rule: {e}", file=sys.stderr)
 
     # Post inline comments (resolvable)
     if issues:

@@ -18,6 +18,7 @@
   - If a <context> block is provided, use it to understand project architecture, naming conventions, and design decisions
   - Context files may include architecture docs, specs, or project instructions — use them to inform your review, not to flag issues in them
   - If context files conflict with the diff, the diff takes precedence
+  - If a <repository_rules> block is provided, these are repository-specific coding conventions that MUST be enforced during review. Violations should be flagged as Warning or Critical severity issues
 </context_rules>
 
 <confidence_rules>

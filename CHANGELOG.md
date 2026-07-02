@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.2.0
+
+- Repository Memory Rules: teach the bot your coding conventions via `.synaptic/rules.json`
+- `@synaptic-ai remember:` command: add rules from PR comments (collaborators only)
+- Rules auto-injected into LLM prompt for both engines (OpenCode and direct)
+- Auto-commit rules.json to repo with SHA-based concurrency retry
+- Collaborator verification via GitHub API before accepting rules
+- Graceful fallback for read-only tokens (fork PRs) and branch protection
+
 ## v0.1.3
 
 - Fix `has_bot_reviews` false positive: remove `body == ""` check that blocked inline comments on empty bot reviews

@@ -6,6 +6,12 @@ Free AI-powered PR review using [OpenCode](https://opencode.ai) free model. Anti
 
 > **Zero cost** — uses `opencode/mimo-v2.5-free` by default. No API charges, no credit card. Just create a free OpenCode account and get your key.
 
+## Preview
+
+| PR Overview | Issue Summary | Inline Comments |
+|:-----------:|:-------------:|:---------------:|
+| ![PR Overview](pr-overview.png) | ![Issue Summary](issue-summary.png) | ![Inline Comment](inline-comment.png) |
+
 ## Quick Start
 
 **1.** Get a free API key at [opencode.ai](https://opencode.ai) — sign up, no credit card required.
@@ -68,7 +74,7 @@ The action masks all API key values in workflow logs automatically.
 | `pull-requests: write` | Post review comments |
 | `contents: read` | Read PR files |
 | `issues: write` | Manage review reactions (OpenCode engine) |
-| `contents: write` | *(OpenCode only)* Auto-commit changes |
+| `contents: write` | Auto-commit changes (OpenCode engine) and repository memory rules |
 
 ## Inputs
 
@@ -110,6 +116,47 @@ Comment `/oc` or `/review` on a PR to trigger re-review. Requires `issues: write
 The bot automatically detects user replies to inline review comments and generates contextual responses. The LLM decides whether to reply — it handles debates, clarification questions, and skips "fixed"/"done" replies.
 
 Unresolved threads are injected as context to prevent re-raising already discussed issues.
+
+## Repository Memory Rules
+
+Teach Synaptic your team's coding conventions. Rules are stored in `.synaptic/rules.json` and automatically enforced during every review.
+
+**Add a rule** by commenting on any PR:
+
+```
+@synaptic-ai remember: Prefer type aliases over interfaces
+```
+
+The bot will:
+1. Verify you're a repo collaborator
+2. Add the rule to `.synaptic/rules.json`
+3. React with 👍 to confirm
+
+Rules are injected into the LLM prompt as behavioral constraints. If a PR violates a rule, the review will flag it as a Warning or Critical issue.
+
+**Requirements:** `contents: write` permission (for committing rules.json). Only repo collaborators can add rules.
+
+**Example rules.json:**
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "rule-001",
+      "rule": "Prefer type aliases over interfaces",
+      "createdBy": "octocat",
+      "createdAt": "2025-01-15T10:30:00Z"
+    },
+    {
+      "id": "rule-002",
+      "rule": "All NestJS controllers require e2e tests",
+      "createdBy": "octocat",
+      "createdAt": "2025-01-15T10:31:00Z"
+    }
+  ]
+}
+```
 
 ## Advanced
 
