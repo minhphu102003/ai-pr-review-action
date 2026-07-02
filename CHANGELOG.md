@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.3
+
+- Fix rules commit targeting main branch instead of PR branch (caused merge conflicts)
+
 ## v0.2.2
 
 - Fix inline comments blocked on re-review: remove `has_bot_reviews()` check that prevented new issues from getting inline comments
