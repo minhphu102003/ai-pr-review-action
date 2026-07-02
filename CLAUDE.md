@@ -25,7 +25,7 @@ prompts/
 
 ## Conventions
 
-- **Python**: stdlib only (no pip dependencies), Python 3.9+
+- **Python**: stdlib only (no pip dependencies), Python 3.10+
 - **Shell**: bash for composite action steps, never use `${{ inputs.* }}` in `run:` blocks (use env vars)
 - **Tags**: `vMAJOR.MINOR.PATCH` — never force-update, always bump
 - **Branches**: `main` (default), `feat/`, `fix/`, `chore/` prefixes

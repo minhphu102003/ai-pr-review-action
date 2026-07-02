@@ -59,7 +59,7 @@ def get_github_info() -> tuple[str, str, int]:
 
 def find_latest_comment(owner: str, repo: str, pr_number: int, token: str) -> dict | None:
     """Find the latest PR comment that contains REVIEW_ISSUES_JSON."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments?per_page=10&sort=created&direction=desc"
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments?per_page=30&sort=created&direction=desc"
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.v3+json",
@@ -81,7 +81,7 @@ _REPLIES_PATTERN = re.compile(
 
 def find_latest_comment_with_replies(owner: str, repo: str, pr_number: int, token: str) -> dict | None:
     """Find the latest PR comment that contains REVIEW_REPLIES_JSON."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments?per_page=10&sort=created&direction=desc"
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments?per_page=30&sort=created&direction=desc"
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.v3+json",
@@ -154,8 +154,10 @@ def has_bot_reviews(owner: str, repo: str, pr_number: int, token: str) -> bool:
     result = safe_request(url, headers=headers)
     for review in result:
         user = review.get("user", {}).get("login", "")
+        body = review.get("body", "")
         if user == "github-actions[bot]" and review.get("state") == "COMMENTED":
-            return True
+            if REVIEW_SIGNATURE in body or body == "":
+                return True
     return False
 
 
@@ -318,22 +320,6 @@ def main():
     else:
         print("WARNING: Could not get commit SHA for inline review", file=sys.stderr)
 
-    # Update summary comment to strip Key Issues
-    summary_text = strip_key_issues(clean_text)
-    if summary_text != clean_text:
-        update_comment(owner, repo, comment_id, token, summary_text)
-        print(f"Updated summary comment (stripped Key Issues)")
-
-    # Post inline comments
-    commit_sha = get_latest_commit(owner, repo, pr_number, token)
-    if commit_sha:
-        success = post_inline_comments(owner, repo, pr_number, token, issues, commit_sha)
-        if success:
-            print("Inline comments posted successfully")
-        else:
-            print("Failed to post inline comments", file=sys.stderr)
-    else:
-        print("WARNING: Could not get commit SHA for inline review", file=sys.stderr)
 
 
 if __name__ == "__main__":

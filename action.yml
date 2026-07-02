@@ -191,10 +191,10 @@ runs:
         PR_NUMBER=$(jq -r '.pull_request.number // .issue.number' "$EVENT_PATH")
         REVIEW_CTX=$(python3 "$ACTION_PATH/scripts/review_context.py" \
           --owner "${REPO%%/*}" --repo "${REPO##*/}" \
-          --pr "$PR_NUMBER" --token "$GITHUB_TOKEN" --mode context 2>/dev/null || true)
+          --pr "$PR_NUMBER" --mode context 2>/dev/null || true)
         REPLY_CTX=$(python3 "$ACTION_PATH/scripts/review_context.py" \
           --owner "${REPO%%/*}" --repo "${REPO##*/}" \
-          --pr "$PR_NUMBER" --token "$GITHUB_TOKEN" --mode replies 2>/dev/null || true)
+          --pr "$PR_NUMBER" --mode replies 2>/dev/null || true)
         DELIMITER="ghadelim_${RUN_ID}"
         {
           echo "REVIEW_CONTEXT<<${DELIMITER}"

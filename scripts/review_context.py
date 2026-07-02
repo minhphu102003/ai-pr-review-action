@@ -8,6 +8,7 @@ Stdlib only — no pip dependencies. Python 3.10+.
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -227,7 +228,6 @@ def extract_replies_json(review_text: str) -> tuple[str, list[dict] | None]:
 
     Returns (clean_text, replies) where clean_text has the JSON block removed.
     """
-    import re
     pattern = re.compile(r"<!--\s*REVIEW_REPLIES_JSON\s*\n(.*?)\n\s*-->", re.DOTALL)
     match = pattern.search(review_text)
     if not match:
@@ -250,10 +250,14 @@ def main_cli():
     parser.add_argument("--owner", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--pr", type=int, required=True)
-    parser.add_argument("--token", required=True)
+    parser.add_argument("--token", default=None, help="GitHub token (falls back to GITHUB_TOKEN env var)")
     parser.add_argument("--mode", choices=["context", "replies"], default="context",
                         help="Output mode: context (for LLM prompt) or replies (user reply threads)")
     args = parser.parse_args()
+    args.token = args.token or os.environ.get("GITHUB_TOKEN")
+    if not args.token:
+        print("Error: --token or GITHUB_TOKEN env var required", file=sys.stderr)
+        sys.exit(1)
 
     try:
         threads = fetch_unresolved_threads(args.owner, args.repo, args.pr, args.token)

@@ -37,7 +37,6 @@ _ANTHROPIC_PREFIXES = ("claude-",)
 
 def sanitize_review(text: str) -> str:
     """Sanitize LLM output before posting as GitHub comment."""
-    import re
     # Strip @mentions to prevent unintended notifications
     text = re.sub(r'(?<!\w)@(\w+)', r'`\@\1`', text)
     # Strip markdown image tags with external URLs (tracking pixels)
@@ -123,13 +122,17 @@ def _closest_model(target: str, candidates: set[str]) -> str | None:
     return best
 
 
-def safe_request(url: str, data: bytes | None = None, headers: dict | None = None, method: str | None = None, max_retries: int = 3, context: str = "api") -> dict:
-    """HTTP request with error handling, timeout, and retry for transient errors."""
+def safe_request(url: str, data: bytes | None = None, headers: dict | None = None, method: str | None = None, max_retries: int = 3, context: str = "api", fatal: bool = True) -> dict:
+    """HTTP request with error handling, timeout, and retry for transient errors.
+
+    When fatal=True (default), calls sys.exit(1) on non-retryable errors.
+    When fatal=False, re-raises the exception so callers can handle it.
+    """
     if method is None:
         method = "POST" if data else "GET"
-    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
 
     for attempt in range(max_retries + 1):
+        req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
         try:
             with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
                 raw = resp.read().decode("utf-8")
@@ -137,7 +140,9 @@ def safe_request(url: str, data: bytes | None = None, headers: dict | None = Non
                     return json.loads(raw)
                 except json.JSONDecodeError:
                     print(f"Non-JSON response from {url}: {raw[:500]}", file=sys.stderr)
-                    sys.exit(1)
+                    if fatal:
+                        sys.exit(1)
+                    raise
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")[:500]
 
@@ -174,7 +179,9 @@ def safe_request(url: str, data: bytes | None = None, headers: dict | None = Non
                 print("Hint: Rate limited. Try again later or use a different provider.", file=sys.stderr)
             elif e.code >= 500:
                 print("Hint: Server error. The API may be experiencing issues.", file=sys.stderr)
-            sys.exit(1)
+            if fatal:
+                sys.exit(1)
+            raise
         except urllib.error.URLError as e:
             if attempt < max_retries:
                 delay = 2 ** (attempt + 1)
@@ -183,7 +190,9 @@ def safe_request(url: str, data: bytes | None = None, headers: dict | None = Non
                 continue
             print(f"Connection error: {e.reason}", file=sys.stderr)
             print("Hint: Check your network connection and base URL.", file=sys.stderr)
-            sys.exit(1)
+            if fatal:
+                sys.exit(1)
+            raise
         except TimeoutError:
             if attempt < max_retries:
                 delay = 2 ** (attempt + 1)
@@ -191,11 +200,15 @@ def safe_request(url: str, data: bytes | None = None, headers: dict | None = Non
                 time.sleep(delay)
                 continue
             print(f"Request timed out after {HTTP_TIMEOUT}s", file=sys.stderr)
-            sys.exit(1)
+            if fatal:
+                sys.exit(1)
+            raise
 
     # Should not reach here, but just in case
     print("All retry attempts exhausted", file=sys.stderr)
-    sys.exit(1)
+    if fatal:
+        sys.exit(1)
+    raise RuntimeError(f"All {max_retries} retry attempts exhausted for {url}")
 
 
 def detect_provider() -> tuple[str, str, str]:
@@ -572,7 +585,7 @@ def find_existing_comment(owner: str, repo: str, pr_number: int, token: str) -> 
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "ai-pr-review-action",
     }
-    result = safe_request(url, headers=headers)
+    result = safe_request(url, headers=headers, fatal=False)
     for comment in result:
         if REVIEW_SIGNATURE in comment.get("body", ""):
             return comment["id"]
@@ -588,7 +601,7 @@ def update_comment(owner: str, repo: str, comment_id: int, token: str, body: str
         "User-Agent": "ai-pr-review-action",
     }
     payload = json.dumps({"body": body}).encode("utf-8")
-    result = safe_request(url, data=payload, headers=headers)
+    result = safe_request(url, data=payload, headers=headers, fatal=False)
     print(f"Review comment updated: {result.get('html_url', 'ok')}")
 
 
@@ -606,7 +619,7 @@ def post_comment(owner: str, repo: str, pr_number: int, token: str, body: str, u
         "User-Agent": "ai-pr-review-action",
     }
     payload = json.dumps({"body": body}).encode("utf-8")
-    result = safe_request(url, data=payload, headers=headers)
+    result = safe_request(url, data=payload, headers=headers, fatal=False)
     print(f"Review comment posted: {result.get('html_url', 'ok')} (id: {result.get('id', '?')})")
 
 
@@ -672,7 +685,7 @@ def get_latest_commit(owner: str, repo: str, pr_number: int, token: str) -> str 
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "ai-pr-review-action",
     }
-    result = safe_request(url, headers=headers)
+    result = safe_request(url, headers=headers, fatal=False)
     return result.get("head", {}).get("sha")
 
 
@@ -684,7 +697,7 @@ def find_existing_review(owner: str, repo: str, pr_number: int, token: str) -> i
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "ai-pr-review-action",
     }
-    result = safe_request(url, headers=headers)
+    result = safe_request(url, headers=headers, fatal=False)
     for review in result:
         if REVIEW_SIGNATURE in review.get("body", ""):
             return review["id"]
@@ -770,10 +783,11 @@ def post_inline_comments(
         "body": "",
         "event": "COMMENT",
         "comments": comments,
+        "commit_id": commit_sha,
     }).encode("utf-8")
 
     try:
-        result = safe_request(url, data=payload, headers=headers)
+        result = safe_request(url, data=payload, headers=headers, fatal=False)
         print(f"Inline review posted: {result.get('html_url', 'ok')}")
         return True
     except urllib.error.HTTPError as e:
