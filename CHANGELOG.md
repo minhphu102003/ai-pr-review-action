@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.1.2
+
+- Fix shell syntax `${ 32768 }` bug in action.yml prompt size warning
+- Consolidate 10+ duplicated functions from `post_inline.py` and `review_direct.py` into `review_context.py`
+- Add retry logic (429/5xx with exponential backoff) to all GitHub API calls via shared `safe_request()`
+- Fix `filter_threads()` fragile `startswith("[")` heuristic — now checks author login instead
+- Move `::add-mask::` from module import time to explicit `mask_secrets()` call in `main()`
+- Mask `GITHUB_TOKEN` in `post_inline.py` (was missing)
+- Add `has_bot_reviews()` duplicate prevention to direct engine's `post_inline_comments()`
+- Remove unused `summary_body` parameter from `post_inline_comments()`
+- Sync context file auto-detect lists: add `README.md` to OpenCode engine path
+- Move `REVIEW_SIGNATURE`, `HTTP_TIMEOUT`, `_JSON_BLOCK_PATTERN` constants to single source of truth in `review_context.py`
+- Move `argparse` import to `main_cli()` to avoid unnecessary import when used as module
+- Update CLAUDE.md project structure to list all three scripts
+
 ## v0.1.1
 
 - Strip model preamble: remove leading text before `## PR Review` heading in both OpenCode and direct engine paths

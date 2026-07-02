@@ -15,6 +15,8 @@ GitHub Action for AI-powered PR review with anti-hallucination rules, severity c
 ```
 action.yml              # Composite action definition
 scripts/
+  review_context.py     # Shared utilities (GitHub API, review processing, context formatting)
+  post_inline.py        # OpenCode engine post-processing (inline comments, replies)
   review_direct.py      # Direct LLM API engine (OpenAI, Anthropic)
 prompts/
   review.txt            # Built-in review prompt
@@ -34,6 +36,6 @@ prompts/
 ## Quick checks
 
 ```bash
-python -c "import py_compile; py_compile.compile('scripts/review_direct.py', doraise=True)"  # Valid Python
-python -c "import yaml; yaml.safe_load(open('action.yml', encoding='utf-8'))"                 # Valid YAML
+python -c "import py_compile; [py_compile.compile(f'scripts/{f}', doraise=True) for f in ('review_context.py','post_inline.py','review_direct.py')]"  # Valid Python
+python -c "import yaml; yaml.safe_load(open('action.yml', encoding='utf-8'))"                                                                       # Valid YAML
 ```

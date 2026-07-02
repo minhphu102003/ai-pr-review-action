@@ -100,7 +100,7 @@ runs:
         # Validate prompt size (GitHub Actions env var limit ~48KB)
         PROMPT_SIZE=$(wc -c < "$PROMPT_PATH")
         if [ "$PROMPT_SIZE" -gt 32768 ]; then
-          echo "::warning::Prompt is ${PROMPT_SIZE} bytes (>${ 32768 } byte limit recommended). May exceed GitHub Actions env var limits."
+          echo "::warning::Prompt is ${PROMPT_SIZE} bytes (>32768 byte limit recommended). May exceed GitHub Actions env var limits."
         fi
         DELIMITER="ghadelim_${RUN_ID}"
         {
@@ -137,7 +137,7 @@ runs:
         if [ -n "$INPUT_CONTEXT_FILES" ]; then
           IFS=',' read -ra FILES <<< "$INPUT_CONTEXT_FILES"
         else
-          FILES=("CLAUDE.md" "AGENTS.md" "SOUL.md" "MEMORY.md" "docs/architecture.md" "docs/ARCHITECTURE.md" "ARCHITECTURE.md")
+          FILES=("CLAUDE.md" "AGENTS.md" "SOUL.md" "MEMORY.md" "docs/architecture.md" "docs/ARCHITECTURE.md" "ARCHITECTURE.md" "README.md")
         fi
         TOTAL=0
         MAX=15000
