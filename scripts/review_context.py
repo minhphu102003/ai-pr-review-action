@@ -152,6 +152,7 @@ def format_reply_context(replies: list[dict], max_chars: int = 4000) -> str:
         "The user replied to your previous review comments. You decide whether to reply:",
         "- If user says 'fixed' or 'done' → no reply needed, skip",
         "- If user is debating or asking questions → generate a reply",
+        "- CRITICAL: Put ALL replies in REVIEW_REPLIES_JSON block, NOT in the review text",
         "",
     ]
     total = len("\n".join(lines))
@@ -183,6 +184,8 @@ def format_review_context(threads: list[dict], max_chars: int = 8000) -> str:
     lines = [
         "<previous_review_context>",
         "Unresolved review threads from prior passes. Do NOT re-raise discussed issues.",
+        "- If the author explained why the code is correct, trust their reasoning unless you can prove a concrete defect",
+        "- If the code has been changed since the discussion, you MAY re-evaluate",
         "",
     ]
     total = len("\n".join(lines))
