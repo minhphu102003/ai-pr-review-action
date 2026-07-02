@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.1
+
+- Fix remember command for OpenCode engine: inject comment body into extract prompt
+- Fix `save_rules` using POST instead of PUT for GitHub Contents API (caused 404)
+- Skip OpenCode review step for remember commands (not needed)
+- Use direct extraction from comment body instead of finding bot comment
+- Create `.synaptic` directory for rules storage
+
 ## v0.2.0
 
 - Repository Memory Rules: teach the bot your coding conventions via `.synaptic/rules.json`
