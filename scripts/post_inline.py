@@ -18,7 +18,7 @@ from review_context import (
 )
 
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "120"))
-REVIEW_SIGNATURE = "*AI Review by ai-pr-review-action*"
+REVIEW_SIGNATURE = "Synaptic PR Review"
 
 _JSON_BLOCK_PATTERN = re.compile(
     r"<!--\s*REVIEW_ISSUES_JSON\s*\n(.*?)\n\s*-->",

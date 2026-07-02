@@ -1,5 +1,7 @@
 # Synaptic PR Review
 
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Synaptic%20PR%20Review-blue?logo=github)](https://github.com/marketplace/actions/synaptic-pr-review)
+
 Free AI-powered PR review using [OpenCode](https://opencode.ai) free model. Anti-hallucination rules, severity callouts, and Mermaid diagrams.
 
 > **Zero cost** — uses `opencode/mimo-v2.5-free` by default. No API charges, no credit card. Just create a free OpenCode account and get your key.

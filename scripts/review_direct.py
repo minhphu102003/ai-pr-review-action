@@ -22,7 +22,7 @@ from review_context import (
 )
 
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "120"))
-REVIEW_SIGNATURE = "*AI Review by ai-pr-review-action*"
+REVIEW_SIGNATURE = "Synaptic PR Review"
 
 # Mask API keys in GitHub Actions logs to prevent accidental exposure.
 for _key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN"):

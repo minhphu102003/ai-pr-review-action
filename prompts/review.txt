@@ -205,7 +205,7 @@
   One paragraph: overall quality, main concerns, recommendation (approve / request changes / needs discussion).
 
   ---
-  *AI Review by ai-pr-review-action*
+  *Review by [Synaptic PR Review](https://github.com/marketplace/actions/synaptic-pr-review)*
 
   ---
 

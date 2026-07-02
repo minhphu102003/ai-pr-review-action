@@ -15,7 +15,7 @@ import urllib.request
 
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "120"))
 GRAPHQL_URL = "https://api.github.com/graphql"
-REVIEW_SIGNATURE = "AI Review by ai-pr-review-action"
+REVIEW_SIGNATURE = "Synaptic PR Review"
 REPLY_SIGNATURE = "<!-- AI_REVIEW_REPLY -->"
 
 _GRAPHQL_QUERY = """
