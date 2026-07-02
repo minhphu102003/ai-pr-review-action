@@ -93,6 +93,16 @@ runs:
         if [ "$IS_REMEMBER" = "true" ]; then
           PROMPT_PATH="$ACTION_PATH/prompts/extract_rule.txt"
           echo "Using extract prompt: $PROMPT_PATH"
+          # Create temp file with extract prompt + comment body so LLM can extract the rule
+          TEMP_PROMPT=$(mktemp)
+          cat "$PROMPT_PATH" > "$TEMP_PROMPT"
+          {
+            echo ""
+            echo "<user_message>"
+            echo "$COMMENT_BODY"
+            echo "</user_message>"
+          } >> "$TEMP_PROMPT"
+          PROMPT_PATH="$TEMP_PROMPT"
         else
           PROMPT_PATH=""
           if [ -n "$INPUT_PROMPT_FILE" ] && [ -f "$INPUT_PROMPT_FILE" ]; then
