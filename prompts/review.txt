@@ -120,6 +120,20 @@
       A-->>C: response
   ```
 
+  ### Issue Summary
+
+  If no issues found, write: > [!NOTE]\n> No issues found
+
+  If issues found, ALWAYS include this table BEFORE Key Issues:
+
+  | Severity | File | Line | Issue | Description |
+  |---|---|---|---|---|
+  | 🔴 Critical | `path/to/file.py` | 42 | Issue title | Brief description of the problem |
+  | 🟡 Warning | `path/to/file.py` | 15 | Issue title | Brief description of the problem |
+  | 🔵 Suggestion | `path/to/file.py` | 8 | Issue title | Brief description of the problem |
+
+  > See inline comments for details and suggested fixes.
+
   ### Key Issues
 
   For each issue (max 7), use the appropriate callout level.
