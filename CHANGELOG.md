@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.2
+
+- Fix inline comments blocked on re-review: remove `has_bot_reviews()` check that prevented new issues from getting inline comments
+- Old reviews are never deleted — discussions preserved across re-reviews
+
 ## v0.2.1
 
 - Fix remember command for OpenCode engine: inject comment body into extract prompt
