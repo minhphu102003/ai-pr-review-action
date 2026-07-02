@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.0
+
+- Issue Summary table: LLM generates a summary table with severity, file, line, and description before Key Issues section
+- Signature renamed to "Synaptic PR Review" with clickable marketplace link
+- Prompt rewrite: increased char limit from 3000 to 8000, merged JSON blocks into output format
+- Conditional sections (`<previous_review_context>`, `<user_replies>`) only included when data exists
+- Bug fixes: safe_request retry logic, duplicate code block removal, has_bot_reviews precision
+- Added `commit_id` to inline review payloads to prevent line drift
+- Token read from env var instead of CLI arg in review_context.py
+
 ## v0.0.20
 
 - Auto-reply to user comments: bot detects user replies to inline review comments and generates contextual responses
