@@ -172,7 +172,9 @@ runs:
         if [ -n "$CONTEXT" ]; then
           {
             echo "CONTEXT<<${DELIMITER}"
+            echo "<context>"
             echo "$CONTEXT"
+            echo "</context>"
             echo "${DELIMITER}"
           } >> "$GITHUB_OUTPUT"
         fi
