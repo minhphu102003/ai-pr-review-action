@@ -117,6 +117,14 @@ def strip_key_issues(review_text: str) -> str:
     return text.strip()
 
 
+def strip_preamble(text: str) -> str:
+    """Remove any text before the ## PR Review heading."""
+    idx = text.find("## PR Review")
+    if idx > 0:
+        return text[idx:]
+    return text
+
+
 def get_latest_commit(owner: str, repo: str, pr_number: int, token: str) -> str | None:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
     headers = {
@@ -267,7 +275,8 @@ def main():
             return
 
     comment_id = comment["id"]
-    body = comment["body"]
+    original_body = comment["body"]
+    body = strip_preamble(original_body)
     print(f"Found comment {comment_id}")
 
     # Extract and post replies to user comments (process first since it's more important)
@@ -299,15 +308,18 @@ def main():
     clean_text, issues = extract_issues_json(clean_text)
     if not issues:
         print("No valid issues found in JSON block.")
+        if clean_text != original_body:
+            update_comment(owner, repo, comment_id, token, clean_text)
+            print("Updated summary comment (stripped preamble)")
         return
 
     print(f"Found {len(issues)} issues")
 
-    # Update summary comment to strip Key Issues
+    # Update summary comment (strip Key Issues, and preamble if applicable)
     summary_text = strip_key_issues(clean_text)
-    if summary_text != clean_text:
+    if summary_text != original_body:
         update_comment(owner, repo, comment_id, token, summary_text)
-        print(f"Updated summary comment (stripped Key Issues)")
+        print("Updated summary comment")
 
     # Post inline comments
     commit_sha = get_latest_commit(owner, repo, pr_number, token)

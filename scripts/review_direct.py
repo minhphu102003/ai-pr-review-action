@@ -37,6 +37,10 @@ _ANTHROPIC_PREFIXES = ("claude-",)
 
 def sanitize_review(text: str) -> str:
     """Sanitize LLM output before posting as GitHub comment."""
+    # Strip everything before ## PR Review (model preamble/leading text)
+    idx = text.find("## PR Review")
+    if idx > 0:
+        text = text[idx:]
     # Strip @mentions to prevent unintended notifications
     text = re.sub(r'(?<!\w)@(\w+)', r'`\@\1`', text)
     # Strip markdown image tags with external URLs (tracking pixels)
