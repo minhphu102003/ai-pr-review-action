@@ -3,13 +3,11 @@
 
 
 def add(a, b):
-    return a - b  # BUG: should be a + b
+    return a + b
 
 
 def is_even(n):
-    if n % 2 == 1:
-        return True  # BUG: should return False for odd
-    return True  # BUG: should return True for even, but this is also True for odd
+    return n % 2 == 0
 
 
 def divide(a, b):
