@@ -469,6 +469,23 @@ def delete_review(owner: str, repo: str, pr_number: int, review_id: int, token: 
         return False
 
 
+def delete_issue_comment(owner: str, repo: str, comment_id: int, token: str) -> bool:
+    """Delete an issue comment. Returns True on success."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/comments/{comment_id}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "ai-pr-review-action",
+    }
+    try:
+        req = urllib.request.Request(url, headers=headers, method="DELETE")
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            return resp.status in (200, 204)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: Could not delete issue comment {comment_id}: {e.code} {e.reason}", file=sys.stderr)
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Review text processing
 # ---------------------------------------------------------------------------
